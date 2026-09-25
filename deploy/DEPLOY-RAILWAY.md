@@ -64,7 +64,20 @@ El preparador no usa `prisma migrate deploy`: despliega el perfil de Afiliados, 
 
 ## 3. Aplicación en Railway
 
-Crear un servicio desde el repositorio dentro del mismo proyecto que PostgreSQL. `railway.json` selecciona `deploy/railway/Dockerfile`, arranque y comprobación `/healthz`. La imagen incluye `affiliates/web`, así que este único servicio publica interfaz y API.
+Crear un servicio desde el repositorio dentro del mismo proyecto que PostgreSQL. La imagen incluye `affiliates/web`, así que este único servicio publica interfaz y API.
+
+Railway ya no aplica `railway.json` (Config as Code) a servicios nuevos: sin ajustes explícitos detecta el `Dockerfile` raíz, que arranca el motor completo y falla pidiendo OIDC. Configurar en el servicio (Settings, o variable):
+
+| Ajuste | Valor |
+|---|---|
+| Variable RAILWAY_DOCKERFILE_PATH | deploy/railway/Dockerfile |
+| Custom Start Command | node dist/src/affiliates/production.js |
+| Healthcheck Path / Timeout | /healthz, 120 s |
+| Replicas | 1 |
+
+`railway.json` se conserva como referencia de estos valores. El log de compilación correcto instala `postgresql-client` y no `chromium`.
+
+La plantilla PostgreSQL de Railway crea actualmente PostgreSQL 18. Para respaldos y restauraciones usar `pg_dump`/`pg_restore` 18 o superior.
 
 Variables permanentes:
 
