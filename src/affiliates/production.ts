@@ -38,4 +38,9 @@ export async function startProduction() {
   await app.listen(Number(process.env.PORT || 8080), '0.0.0.0');
   return { app, prisma };
 }
-if (require.main === module) startProduction().catch(() => { console.error('No se pudo iniciar Afiliados: revisa variables, migraciones, comunidad y rol de base de datos.'); process.exit(1); });
+if (require.main === module)
+  startProduction().catch((error: any) => {
+    console.error('No se pudo iniciar Afiliados:', error?.message || error);
+    if (process.env.NODE_ENV !== 'production') console.error(error?.stack || error);
+    process.exit(1);
+  });
