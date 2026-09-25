@@ -21,7 +21,6 @@
     "affiliates:production": "node dist/src/affiliates/production.js",
     "affiliates:db:prepare": "node deploy/railway/prepare-db.cjs",
     "affiliates:bootstrap": "node dist/scripts/bootstrap-affiliates-production.js",
-    "affiliates:frontend:build": "node deploy/vercel/build.cjs",
     "affiliates:deploy:test": "npm run build && node --test tests/integration/deploy-config.test.cjs tests/integration/production-deploy.test.cjs"
   },
   "dependencies": {

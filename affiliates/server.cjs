@@ -170,7 +170,7 @@ function createApp(
         }
         if (p === '/api/login' && method === 'POST') {
           const b = await body(req);
-          // Per-account key remains stable behind Railway/Vercel proxies without trusting client IP headers.
+          // Per-account key remains stable behind the Railway proxy without trusting client IP headers.
           const key = hash(String(b.email || '').trim().toLowerCase());
           const now = Date.now();
           if (rates.size >= 10000) {

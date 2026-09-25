@@ -10,7 +10,7 @@ test('Production bootstrap and server on a separate PostgreSQL database',{skip:!
  let running;
  const saved={...process.env};
  try{
-  const env={...process.env,PSQL_BIN:bin,DATABASE_OWNER_URL:owner.href,RUNTIME_DB_PASSWORD:cfg.runtimePassword,DATABASE_URL:runtime.href,AFFILIATES_TENANT_ID:randomUUID(),AFFILIATES_APP_ID:randomUUID(),INITIAL_COMMUNITY_NAME:'Deploy Test',INITIAL_ROOT_NAME:'Test Root',INITIAL_ROOT_EMAIL:'root@deploy.test',INITIAL_ROOT_PASSWORD:'Test-deploy-password-2026',ALLOWED_ORIGINS:'https://frontend.example',PORT:'0'};
+  const env={...process.env,PSQL_BIN:bin,DATABASE_OWNER_URL:owner.href,RUNTIME_DB_PASSWORD:cfg.runtimePassword,DATABASE_URL:runtime.href,AFFILIATES_TENANT_ID:randomUUID(),AFFILIATES_APP_ID:randomUUID(),INITIAL_COMMUNITY_NAME:'Deploy Test',INITIAL_ROOT_NAME:'Test Root',INITIAL_ROOT_EMAIL:'root@deploy.test',INITIAL_ROOT_PASSWORD:'Test-deploy-password-2026',ALLOWED_ORIGINS:'https://app.example',PORT:'0'};
   for(const command of ['deploy/railway/prepare-db.cjs','deploy/railway/prepare-db.cjs','dist/scripts/bootstrap-affiliates-production.js']){
    const r=spawnSync(process.execPath,[command],{env,encoding:'utf8',windowsHide:true});assert.equal(r.status,0,command+' failed: '+r.stderr);
   }
@@ -20,12 +20,15 @@ test('Production bootstrap and server on a separate PostgreSQL database',{skip:!
   assert.equal((await fetch(base+'/healthz')).status,200);
   const route='/affiliates/'+env.AFFILIATES_TENANT_ID+'/'+env.AFFILIATES_APP_ID;
   assert.equal((await fetch(base+route+'/api/status')).status,200);
-  const login=await fetch(base+route+'/api/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://frontend.example'},body:JSON.stringify({email:env.INITIAL_ROOT_EMAIL,password:env.INITIAL_ROOT_PASSWORD})});
+  for(const page of ['/',route+'/',route+'/sw.js',route+'/manifest.webmanifest']){const r=await fetch(base+page);assert.equal(r.status,200,page);assert.equal(r.headers.get('cache-control'),'no-cache');}
+  assert.match(await (await fetch(base+route+'/')).text(),/<html/i);
+  const login=await fetch(base+route+'/api/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://app.example'},body:JSON.stringify({email:env.INITIAL_ROOT_EMAIL,password:env.INITIAL_ROOT_PASSWORD})});
   assert.equal(login.status,200);assert.match(login.headers.get('set-cookie'),/HttpOnly; SameSite=Lax/);assert.match(login.headers.get('set-cookie'),/; Secure/);assert.ok(login.headers.get('set-cookie').includes('Path='+route+'/'));
   const cookie=login.headers.get('set-cookie').split(';')[0],data=await login.json();
   const stats=await fetch(base+route+'/api/stats',{headers:{Cookie:cookie}});assert.equal((await stats.json()).total,1);
   const blocked=await fetch(base+route+'/api/settings',{method:'PUT',headers:{'Content-Type':'application/json',Cookie:cookie,'X-CSRF-Token':data.csrf,Origin:'https://untrusted.example'},body:JSON.stringify({maxLoginLevel:1})});assert.equal(blocked.status,403);
-  const update=await fetch(base+route+'/api/settings',{method:'PUT',headers:{'Content-Type':'application/json',Cookie:cookie,'X-CSRF-Token':data.csrf,Origin:'https://frontend.example'},body:JSON.stringify({maxLoginLevel:1})});assert.equal(update.status,200);
+  const update=await fetch(base+route+'/api/settings',{method:'PUT',headers:{'Content-Type':'application/json',Cookie:cookie,'X-CSRF-Token':data.csrf,Origin:'https://app.example'},body:JSON.stringify({maxLoginLevel:1})});assert.equal(update.status,200);
+  const sameOrigin=await fetch(base+route+'/api/settings',{method:'PUT',headers:{'Content-Type':'application/json',Cookie:cookie,'X-CSRF-Token':data.csrf,Origin:base.replace('http:','https:')},body:JSON.stringify({maxLoginLevel:2})});assert.equal(sameOrigin.status,200);
  }finally{
   if(running){await running.app.close();await running.prisma.$disconnect();}
   for(const k of Object.keys(process.env))if(!(k in saved))delete process.env[k];Object.assign(process.env,saved);
