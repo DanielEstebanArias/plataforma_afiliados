@@ -1,0 +1,7 @@
+node_modules
+.tooling
+.npm-cache
+dist
+mobile
+prisma/migrations
+package-lock.json

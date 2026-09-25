@@ -1,0 +1,42 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: superapp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      RUNTIME_DB_PASSWORD: ${RUNTIME_DB_PASSWORD:?Set RUNTIME_DB_PASSWORD}
+    volumes:
+      - db:/var/lib/postgresql/data
+      - ./infra/init-db.sh:/docker-entrypoint-initdb.d/10-runtime.sh:ro
+    ports: ['127.0.0.1:5432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d superapp']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes: ['redis:/data']
+    ports: ['127.0.0.1:6379:6379']
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://superapp_runtime:${RUNTIME_DB_PASSWORD}@db:5432/superapp
+      DIRECT_DATABASE_URL: postgresql://superapp_runtime:${RUNTIME_DB_PASSWORD}@db:5432/superapp
+      REDIS_URL: redis://redis:6379
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes: ['artifacts:/app/artifacts']
+volumes:
+  db:
+  redis:
+  artifacts:

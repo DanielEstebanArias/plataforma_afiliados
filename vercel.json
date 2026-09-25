@@ -1,0 +1,1 @@
+{"framework":null,"installCommand":"node --version","buildCommand":"node deploy/vercel/build.cjs"}

@@ -1,0 +1,7 @@
+{
+  "appId": "com.superapp.afiliados",
+  "appName": "Plataforma Afiliados",
+  "webDir": "native-web",
+  "android": { "path": "native/android" },
+  "ios": { "path": "native/ios" }
+}

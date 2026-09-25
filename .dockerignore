@@ -1,0 +1,16 @@
+node_modules
+.npm-cache
+.tooling
+.env
+artifacts
+mobile
+dist
+.git
+affiliates/data
+affiliates/node_modules
+affiliates/native
+affiliates/native-web
+affiliates/.npm-cache
+
+.vercel
+.env.*

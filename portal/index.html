@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SuperApp Engine</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <aside>
+      <div class="brand">
+        S<span>SuperApp<br /><small>ENGINE / CONTROL CENTER</small></span>
+      </div>
+      <p class="eyebrow">ESPACIO DE TRABAJO</p>
+      <button id="refresh">Mis aplicaciones</button>
+      <div class="sidebar-note">Una plataforma.<br />Infinitas posibilidades.</div>
+      <button id="logout" hidden>Cerrar sesión</button>
+    </aside>
+    <main>
+      <header>
+        <span class="eyebrow">CONSTRUYE · CONECTA · PUBLICA</span
+        ><span id="connection">Sin conexión</span>
+      </header>
+      <section class="hero">
+        <h1>Tu próxima aplicación<br />empieza aquí.</h1>
+        <p>Diseña con instrucciones, conecta tus datos y publica desde un solo lugar.</p>
+        <button id="login">Conectar mi cuenta</button>
+      </section>
+      <p id="notice" role="status" aria-live="polite"></p>
+      <div id="workspace" hidden>
+        <section class="toolbar">
+          <h2>Aplicaciones</h2>
+          <button id="new-app">+ Nueva aplicación</button>
+        </section>
+        <div id="apps" class="cards"></div>
+        <section id="editor" hidden>
+          <div class="toolbar">
+            <div>
+              <span class="eyebrow">APLICACIÓN SELECCIONADA</span>
+              <h2 id="app-name"></h2>
+            </div>
+            <div>
+              <button id="android">Compilar Android</button> <button id="ios">Compilar iOS</button>
+            </div>
+          </div>
+          <div class="columns">
+            <article>
+              <h3>Asistente de proyecto</h3>
+              <p>
+                Describe la pantalla o tabla que necesitas. Los cambios se aplican a esta
+                aplicación.
+              </p>
+              <div id="messages" aria-live="polite"></div>
+              <form id="prompt-form">
+                <label for="prompt">Instrucción</label
+                ><textarea
+                  id="prompt"
+                  required
+                  maxlength="12000"
+                  placeholder="Crea una pantalla de inspecciones con un formulario…"
+                ></textarea
+                ><button>Enviar instrucción</button>
+              </form>
+            </article>
+            <article>
+              <h3>Configuración actual</h3>
+              <button id="load-metadata">Actualizar configuración</button>
+              <pre id="metadata"></pre>
+              <h3>Compilaciones</h3>
+              <ul id="builds"></ul>
+            </article>
+          </div>
+        </section>
+      </div>
+      <dialog id="create-dialog">
+        <form id="create-form">
+          <h2>Nueva aplicación</h2>
+          <label
+            >Nombre<input name="name" required maxlength="100" placeholder="Mi aplicación" /></label
+          ><label
+            >Identificador de aplicación<input
+              name="bundleId"
+              required
+              pattern="[a-z][a-z0-9]*(\.[a-z][a-z0-9]*){2,}"
+              placeholder="com.empresa.aplicacion"
+          /></label>
+          <div class="toolbar">
+            <button type="button" id="cancel-create">Cancelar</button
+            ><button>Crear aplicación</button>
+          </div>
+        </form>
+      </dialog>
+    </main>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

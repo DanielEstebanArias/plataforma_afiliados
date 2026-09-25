@@ -1,0 +1,49 @@
+require 'json'
+require 'shellwords'
+require 'fileutils'
+
+default_platform(:android)
+
+def required(name)
+  value = ENV.fetch(name)
+  UI.user_error!("Missing #{name}") if value.empty?
+  value
+end
+
+def flutter_build(platform)
+  args = ['flutter', 'build', platform, '--release', '--dart-define-from-file=' + required('DART_DEFINES_FILE'), '--build-name=' + required('APP_VERSION'), '--build-number=' + required('BUILD_NUMBER')]
+  sh(*args)
+end
+
+platform :android do
+  desc 'Build signed Android App Bundle'
+  lane :release do
+    UI.user_error!('Signing keystore does not exist') unless File.file?(required('ANDROID_KEYSTORE_PATH'))
+    flutter_build('appbundle')
+    FileUtils.mkdir_p(required('OUTPUT_DIR'))
+    FileUtils.cp('build/app/outputs/bundle/release/app-release.aab', File.join(required('OUTPUT_DIR'), 'app.aab'))
+  end
+end
+
+platform :ios do
+  desc 'Build signed iOS archive on a macOS runner'
+  lane :release do
+    UI.user_error!('iOS builds require macOS and Xcode') unless RUBY_PLATFORM.include?('darwin')
+    keychain = 'superapp-' + required('BUILD_ID')
+    create_keychain(name: keychain, password: required('KEYCHAIN_PASSWORD'), default_keychain: false, unlock: true, timeout: 3600, lock_when_sleeps: true)
+    begin
+      import_certificate(certificate_path: required('IOS_CERTIFICATE_PATH'), certificate_password: required('IOS_CERTIFICATE_PASSWORD'), keychain_name: keychain, keychain_password: required('KEYCHAIN_PASSWORD'))
+      profile = install_provisioning_profile(path: required('IOS_PROFILE_PATH'))
+      update_code_signing_settings(use_automatic_signing: false, path: 'ios/Runner.xcodeproj', team_id: required('APPLE_TEAM_ID'), code_sign_identity: 'Apple Distribution', profile_name: required('IOS_PROFILE_NAME'), bundle_identifier: required('BUNDLE_ID'))
+      sh('flutter', 'build', 'ios', '--release', '--no-codesign', '--dart-define-from-file=' + required('DART_DEFINES_FILE'), '--build-name=' + required('APP_VERSION'), '--build-number=' + required('BUILD_NUMBER'))
+      build_app(workspace: 'ios/Runner.xcworkspace', scheme: 'Runner', export_method: 'app-store', output_directory: required('OUTPUT_DIR'), output_name: 'app.ipa', export_options: { provisioningProfiles: { required('BUNDLE_ID') => required('IOS_PROFILE_NAME') } })
+      if ENV['UPLOAD_TESTFLIGHT'] == 'true'
+        api_key = app_store_connect_api_key(key_id: required('APP_STORE_KEY_ID'), issuer_id: required('APP_STORE_ISSUER_ID'), key_filepath: required('APP_STORE_KEY_PATH'))
+        upload_to_testflight(api_key: api_key, ipa: File.join(required('OUTPUT_DIR'), 'app.ipa'), skip_waiting_for_build_processing: true)
+      end
+    ensure
+      delete_keychain(name: keychain)
+      FileUtils.rm_f(profile) if profile && File.file?(profile)
+    end
+  end
+end

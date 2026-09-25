@@ -1,0 +1,10 @@
+FROM ghcr.io/cirruslabs/flutter:3.29.3
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends ruby-full ruby-dev build-essential jq curl git python3 awscli && rm -rf /var/lib/apt/lists/*
+RUN gem install bundler --no-document
+COPY infra/compiler_runner.sh /usr/local/bin/compiler_runner
+RUN chmod 755 /usr/local/bin/compiler_runner && useradd -m -u 10001 builder && mv "$FLUTTER_ROOT" /opt/flutter && chown -R builder:builder /opt/flutter "$ANDROID_HOME"
+ENV FLUTTER_ROOT=/opt/flutter FLUTTER_HOME=/opt/flutter
+ENV PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH
+USER builder
+ENTRYPOINT ["/usr/local/bin/compiler_runner"]
