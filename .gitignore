@@ -21,5 +21,4 @@ mobile/android/
 mobile/ios/
 flutter_*.log
 
-.vercel
 .env.*

@@ -1,19 +1,21 @@
-# Desplegar Afiliados en Railway y Vercel
+# Desplegar Afiliados en Railway
 
 Esta entrega prepara el módulo de Afiliados integrado con los modelos de SuperApp. No inicia los otros módulos de IA, pagos o GIS. Mantiene las fotos en PostgreSQL; no requiere discos persistentes en el backend. La instalación local sigue iniciándose con `npm run affiliates`.
 
 ## Distribución
 
-- Railway: Node.js/NestJS, servicio permanente con una réplica, más PostgreSQL 17 con volumen persistente.
-- Vercel: archivos públicos de `affiliates/web` y proxy de las rutas API hacia Railway.
-- El navegador usa siempre el dominio de Vercel. Las cookies HttpOnly y la protección CSRF conservan el alcance de cada comunidad. Las respuestas API y fotos no se almacenan en caché.
-- `DATABASE_URL` usa el rol `superapp_runtime`, sin superusuario ni bypass de RLS. Nunca colocar credenciales PostgreSQL en Vercel.
+Un solo proyecto Railway con dos servicios, en la misma región:
+
+- App: Node.js/NestJS, servicio permanente con una réplica. Sirve la interfaz (`affiliates/web`: HTML, JS, CSS, manifest y service worker) y la API desde el mismo dominio.
+- PostgreSQL 17 con volumen persistente, accesible por la red privada de Railway.
+- El navegador usa un único origen (dominio de Railway o dominio propio). Sin proxy intermedio ni CORS entre dominios. Las cookies HttpOnly y la protección CSRF conservan el alcance de cada comunidad. Las respuestas API y fotos no se almacenan en caché.
+- `DATABASE_URL` usa el rol `superapp_runtime`, sin superusuario ni bypass de RLS.
 
 ## 1. Preparar el repositorio
 
 Descomprimir SuperApp-Engine.zip y subir la carpeta `superapp-engine` como raíz de un repositorio privado. No subir `affiliates/data`, `.tooling`, `.env*`, `node_modules` ni respaldos. No publicar el archivo privado `superapp-local.json`.
 
-En ambos proveedores elegir esa misma raíz. Si se sube la carpeta contenedora, seleccionar `superapp-engine` como Root Directory. En Railway comprobar que la ruta del archivo de configuración apunta a `railway.json` dentro de esa raíz.
+Si se sube la carpeta contenedora, seleccionar `superapp-engine` como Root Directory. En Railway comprobar que la ruta del archivo de configuración apunta a `railway.json` dentro de esa raíz.
 
 ## 2. Crear PostgreSQL en Railway
 
@@ -60,9 +62,22 @@ $env:PGDATABASE = $env:DATABASE_OWNER_URL
 
 El preparador no usa `prisma migrate deploy`: despliega el perfil de Afiliados, que no requiere extensiones vector/PostGIS del motor completo. No mezclar estos procedimientos con una base del motor completo.
 
-## 3. Backend en Railway
+## 3. Aplicación en Railway
 
-Crear servicio desde el repositorio. `railway.json` selecciona `deploy/railway/Dockerfile`, arranque y comprobación `/healthz`.
+Crear un servicio desde el repositorio dentro del mismo proyecto que PostgreSQL. La imagen incluye `affiliates/web`, así que este único servicio publica interfaz y API.
+
+Railway ya no aplica `railway.json` (Config as Code) a servicios nuevos: sin ajustes explícitos detecta el `Dockerfile` raíz, que arranca el motor completo y falla pidiendo OIDC. Configurar en el servicio (Settings, o variable):
+
+| Ajuste | Valor |
+|---|---|
+| Variable RAILWAY_DOCKERFILE_PATH | deploy/railway/Dockerfile |
+| Custom Start Command | node dist/src/affiliates/production.js |
+| Healthcheck Path / Timeout | /healthz, 120 s |
+| Replicas | 1 |
+
+`railway.json` se conserva como referencia de estos valores. El log de compilación correcto instala `postgresql-client` y no `chromium`.
+
+La plantilla PostgreSQL de Railway crea actualmente PostgreSQL 18. Para respaldos y restauraciones usar `pg_dump`/`pg_restore` 18 o superior.
 
 Variables permanentes:
 
@@ -71,53 +86,42 @@ Variables permanentes:
 | DATABASE_URL | URL INTERNA PostgreSQL con usuario superapp_runtime y su contraseña, base real de Railway |
 | AFFILIATES_TENANT_ID | UUID de la entidad restaurada o recién creada |
 | AFFILIATES_APP_ID | UUID de la comunidad principal |
-| ALLOWED_ORIGINS | Origen exacto del frontend, por ejemplo https://mi-plataforma.vercel.app |
+| ALLOWED_ORIGINS | Origen público exacto de la aplicación, por ejemplo https://mi-plataforma.up.railway.app |
 | NODE_ENV | production |
 | SECURE_COOKIES | true (el arranque de producción también lo fuerza) |
 
 Railway proporciona PORT automáticamente. El servidor escucha en 0.0.0.0. No necesita POSTGRES_BIN, rutas Windows ni superapp-local.json.
 
-No dejar DATABASE_OWNER_URL ni RUNTIME_DB_PASSWORD ni INITIAL_ROOT_PASSWORD en las variables permanentes del backend. Solo DATABASE_URL contiene la credencial de ejecución limitada.
+No dejar DATABASE_OWNER_URL ni RUNTIME_DB_PASSWORD ni INITIAL_ROOT_PASSWORD en las variables permanentes. Solo DATABASE_URL contiene la credencial de ejecución limitada.
 
-Generar dominio público HTTPS del backend y comprobar `/healthz`: debe responder 200 y `{"status":"ok"}`. El dominio es necesario para que Vercel pueda llegar a Railway. Mantener PostgreSQL por red privada para la aplicación y deshabilitar su exposición pública cuando ya no haga falta para administración.
+Generar el dominio público HTTPS del servicio (Settings → Networking → Generate Domain) y comprobar `/healthz`: debe responder 200 y `{"status":"ok"}`. Colocar ese origen en ALLOWED_ORIGINS y volver a desplegar. Mantener PostgreSQL por red privada y deshabilitar su exposición pública cuando ya no haga falta para administración.
+
+Rutas que atiende el servicio:
+
+- `/` y `/api/*` → comunidad principal (AFFILIATES_TENANT_ID / AFFILIATES_APP_ID).
+- `/affiliates/:tenantId/:appId/` y `/affiliates/:tenantId/:appId/api/*` → cada comunidad, con su propia cookie y el mismo frontend.
+- Recursos, manifest y service worker se sirven desde `affiliates/web` con `Cache-Control: no-cache` y CSP `default-src 'self'`.
 
 Con una réplica el limitador de intentos por cuenta reside en memoria. Antes de aumentar réplicas, trasladarlo a un almacenamiento compartido. Revisar consumo de memoria, conexiones y concurrencia con datos representativos antes de dimensionar producción.
 
-## 4. Frontend en Vercel
+## 4. Dominio propio (opcional)
 
-Importar el mismo repositorio y elegir la misma raíz. Preset: Other. `vercel.json` ya define el comando de compilación. No configurar otra carpeta de salida: se genera `.vercel/output` con la Build Output API v3.
-
-Única variable requerida:
-
-```
-RAILWAY_BACKEND_URL=https://TU-BACKEND.up.railway.app
-```
-
-Debe ser solo el origen HTTPS, sin ruta, usuario ni contraseña. Es un destino público de API, no una credencial. No incluir DATABASE_URL ni secretos en Vercel.
-
-El build copia únicamente `affiliates/web` y genera estas rutas:
-
-- `/api/*` → Railway `/api/*`.
-- `/affiliates/:tenantId/:appId/api/*` → la misma ruta de Railway.
-- `/affiliates/:tenantId/:appId/` → interfaz de Vercel, manteniendo la URL.
-- Recursos, manifest y service worker de cada comunidad → archivos públicos locales de Vercel.
-
-Una vez conocido el dominio de Vercel, agregarlo exactamente en ALLOWED_ORIGINS de Railway y volver a desplegar el backend. Para dominio propio, actualizar también esa lista. Separar orígenes por comas; no usar comodines. Las previews deben usar un backend de pruebas o un origen autorizado explícitamente; no dar acceso automático de todas las previews a producción.
+En el servicio de la aplicación: Settings → Networking → Custom Domain, y crear en el DNS el registro CNAME que indique Railway. Railway emite el certificado HTTPS. Agregar el nuevo origen exacto a ALLOWED_ORIGINS (separados por comas, sin comodines), por ejemplo `https://afiliados.midominio.com,https://mi-plataforma.up.railway.app`, y volver a desplegar. Las sesiones iniciadas en el dominio anterior no se trasladan; basta volver a iniciar sesión.
 
 ## 5. Comprobar antes de usar
 
-- Abrir Vercel, entrar con la raíz y comprobar los datos restaurados.
+- Abrir el dominio público, entrar con la raíz y comprobar los datos restaurados.
 - Abrir una comunidad por su URL directa y recargar; comprobar sesión y fotos.
 - Registrar y editar un afiliado de prueba, revisar CSRF y que otra rama no pueda verlo.
 - Comprobar solicitud, aprobación y suspensión de comunidad, acceso por nivel y dashboard.
 - Instalar la PWA en un navegador compatible. Sin conexión solo se conserva la interfaz; los datos requieren el servidor.
-- Android/iOS: volver a ejecutar `prepare-native.cjs` con el dominio HTTPS del frontend (y ruta de comunidad cuando corresponda), luego `cap sync`. Agregar los orígenes nativos necesarios en Railway. Probar dispositivos antes de firmar/publicar.
+- Android/iOS: volver a ejecutar `prepare-native.cjs` con el dominio HTTPS público (y ruta de comunidad cuando corresponda), luego `cap sync`. Agregar los orígenes nativos necesarios (por ejemplo `capacitor://localhost`) a ALLOWED_ORIGINS. Probar dispositivos antes de firmar/publicar.
 
 ## Validación incluida
 
-- Compilación TypeScript y pruebas de rutas Vercel.
-- Arranque real del perfil de producción sobre una base PostgreSQL temporal aislada; preparación repetible, creación de raíz, healthcheck, login, cookies seguras, alcance de comunidad y rechazo de origen ajeno.
-- No se ha desplegado ni transferido ningún dato a proveedores. Falta validar en sus servicios reales con tus cuentas y dominios.
-- Docker no pudo ejecutarse en este PC porque el motor Docker no está disponible; la imagen debe compilarse en Railway o en un equipo con Docker activo.
+- Compilación TypeScript y prueba de configuración Railway (`npm run affiliates:deploy:test`).
+- Arranque real del perfil de producción sobre una base PostgreSQL temporal aislada; preparación repetible, creación de raíz, healthcheck, interfaz servida en raíz y comunidad, login, cookies seguras, alcance de comunidad, mismo origen aceptado y rechazo de origen ajeno. Requiere `affiliates/data/superapp-local.json`; sin ese archivo la prueba se omite.
+- No se ha desplegado ni transferido ningún dato a Railway. Falta validar en el servicio real con tu cuenta y dominio.
+- La imagen Docker debe compilarse en Railway o en un equipo con Docker activo.
 
-Fuentes de configuración: https://docs.railway.com/config-as-code/reference , https://docs.railway.com/deployments/healthchecks , https://vercel.com/docs/build-output-api/configuration .
+Fuentes de configuración: https://docs.railway.com/config-as-code/reference , https://docs.railway.com/deployments/healthchecks , https://docs.railway.com/guides/public-networking .

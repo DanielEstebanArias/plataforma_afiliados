@@ -1,7 +1,7 @@
 DATABASE_URL=postgresql://superapp_runtime:CONTRASENA@HOST_INTERNO:5432/railway
 AFFILIATES_TENANT_ID=UUID_DE_LA_ENTIDAD
 AFFILIATES_APP_ID=UUID_DE_LA_COMUNIDAD_PRINCIPAL
-ALLOWED_ORIGINS=https://TU-FRONTEND.vercel.app
+ALLOWED_ORIGINS=https://TU-APP.up.railway.app
 NODE_ENV=production
 SECURE_COOKIES=true
 # Solo para preparar la base; retirar después del bootstrap:

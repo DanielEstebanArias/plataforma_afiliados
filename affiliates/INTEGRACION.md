@@ -80,4 +80,4 @@ Validación local: 10.055 afiliados en una entidad de prueba aislada, sin mezcla
 
 ## Despliegue separado
 
-Para Railway (backend/PostgreSQL) y Vercel (frontend), consultar `../deploy/DEPLOY-RAILWAY-VERCEL.md`. El arranque de producción está separado del local; no lee archivos privados de este PC.
+Para Railway (interfaz, API y PostgreSQL en un solo proyecto), consultar `../deploy/DEPLOY-RAILWAY.md`. El arranque de producción está separado del local; no lee archivos privados de este PC.

@@ -12,5 +12,4 @@ affiliates/native
 affiliates/native-web
 affiliates/.npm-cache
 
-.vercel
 .env.*
