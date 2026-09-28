@@ -8,10 +8,31 @@
   border-bottom: 1px solid #e4ebe5;
   flex-wrap: wrap;
 }
-.board.board-focus { position:fixed; inset:22px; z-index:20; box-shadow:0 0 0 100vmax #0b2d25b8,0 20px 80px #0003; display:flex;flex-direction:column; }
-.board-focus #network {flex:1;min-height:0;display:flex;flex-direction:column;}
-.board-focus .org-viewport {flex:1;height:auto;min-height:220px;}
-.board-focus .org-toolbar,.board-focus .org-help {flex-shrink:0;}
+.board.board-focus {
+  position: fixed;
+  inset: 22px;
+  z-index: 20;
+  box-shadow:
+    0 0 0 100vmax #0b2d25b8,
+    0 20px 80px #0003;
+  display: flex;
+  flex-direction: column;
+}
+.board-focus #network {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.board-focus .org-viewport {
+  flex: 1;
+  height: auto;
+  min-height: 220px;
+}
+.board-focus .org-toolbar,
+.board-focus .org-help {
+  flex-shrink: 0;
+}
 .org-legend {
   font-size: 12px;
   color: #6f8579;
@@ -59,6 +80,8 @@
   background-image: radial-gradient(#cbd9cd 0.8px, transparent 0.8px);
   background-size: 20px 20px;
   cursor: grab;
+  touch-action: none;
+  user-select: none;
   overscroll-behavior: contain;
   position: relative;
 }

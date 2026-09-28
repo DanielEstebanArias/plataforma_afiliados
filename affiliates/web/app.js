@@ -10,7 +10,18 @@ let state = { members: [], view: 'tree', query: '' },
   apiBase = '',
   installPrompt;
 const native = !!window.Capacitor?.isNativePlatform?.();
+function scopedRoute(route) {
+  if (
+    !state.selectedCommunity ||
+    !/^\/(members(?:[/?]|$)|me(?:\?|$)|stats(?:\?|$)|settings(?:\?|$)|dashboard(?:\?|$)|fields(?:\?|$)|registration(?:\?|$)|superapp(?:\?|$))/.test(
+      route,
+    )
+  )
+    return route;
+  return '/communities/' + state.selectedCommunity + '/admin' + route;
+}
 async function api(route, options = {}) {
+  route = scopedRoute(route);
   const response = await fetch(apiBase + '/api' + route, {
     ...options,
     headers: {
@@ -24,7 +35,13 @@ async function api(route, options = {}) {
   if (!response.ok) throw new Error(data.error || 'No se pudo conectar.');
   return data;
 }
-const post = (route, data, method = 'POST') => api(route, { method, body: JSON.stringify(data) });
+const post = (route, data, method = 'POST') =>
+  api(
+    route === '/communities' && state.selectedCommunity
+      ? '/communities/' + state.selectedCommunity + '/admin/communities'
+      : route,
+    { method, body: JSON.stringify(data) },
+  );
 function toast(message) {
   $('#toast').textContent = message;
   $('#toast').style.display = 'block';
@@ -45,9 +62,17 @@ const avatar = (m) =>
 async function photos() {
   for (const img of document.querySelectorAll('img[data-photo]')) {
     try {
-      const r = await fetch(apiBase + `/api/members/${img.dataset.photo}/photo`, {
-        headers: nativeToken ? { Authorization: 'Bearer ' + nativeToken } : {},
-      });
+      const photoRoute = `/members/${img.dataset.photo}/photo`;
+      const r = await fetch(
+        apiBase +
+          '/api' +
+          (state.selectedCommunity && img.dataset.photo === state.user.id
+            ? photoRoute
+            : scopedRoute(photoRoute)),
+        {
+          headers: nativeToken ? { Authorization: 'Bearer ' + nativeToken } : {},
+        },
+      );
       if (r.ok) {
         const u = URL.createObjectURL(await r.blob());
         img.src = u;
@@ -67,9 +92,32 @@ function auth(configured) {
     button.disabled = true;
     try {
       if (!configured) await post('/setup', b);
-      const result = await post('/login', { email: b.email, password: b.password, native });
+      const result = await post('/login', {
+        email: b.email,
+        password: b.password,
+        native,
+        communityAppId: b.communityAppId,
+      });
+      if (result.communities) {
+        let chooser = $('#loginCommunity');
+        if (!chooser) {
+          chooser = document.createElement('label');
+          chooser.id = 'loginCommunity';
+          $('#authError').before(chooser);
+        }
+        chooser.innerHTML = `Estas credenciales pertenecen a varias comunidades. Selecciona una:<select name="communityAppId" required><option value="">Seleccionar comunidad</option>${result.communities.map((c) => `<option value="${esc(c.appId)}">${esc(c.name)}</option>`).join('')}</select>`;
+        $('#authError').textContent = '';
+        return;
+      }
       csrf = result.csrf;
       nativeToken = result.token || '';
+      if (result.redirectUrl) {
+        if (!native) {
+          location.assign(result.redirectUrl);
+          return;
+        }
+        apiBase = new URL(result.redirectUrl, apiBase || location.href).href.replace(/\/$/, '');
+      }
       await load();
     } catch (error) {
       $('#authError').textContent = error.message;
@@ -77,17 +125,38 @@ function auth(configured) {
       button.disabled = false;
     }
   };
+  $('#authForm').addEventListener('input', (event) => {
+    if (['email', 'password'].includes(event.target.name)) $('#loginCommunity')?.remove();
+  });
 }
 async function load() {
+  const selected = state.selectedCommunity,
+    previousView = state.view;
+  state.selectedCommunity = null;
+  state.treeRoot = null;
   const me = await api('/me');
   csrf = me.csrf;
   state.user = me.user;
   state.org = me.organization;
   state.paged = !!state.org.integration;
   if (state.paged) {
-    const [stats, settings, page] = await Promise.all([
+    const settings = await api('/settings');
+    state.settings = settings;
+    if (settings.superuser) {
+      if (selected) {
+        await openCommunityTree(selected);
+        state.view = previousView;
+        render();
+        return;
+      }
+      state.view = 'communities';
+      state.members = [];
+      state.stats = null;
+      render();
+      return;
+    }
+    const [stats, page] = await Promise.all([
       api('/stats'),
-      api('/settings'),
       api('/members?parentId=' + state.user.id + '&limit=25'),
     ]);
     state.stats = stats;
@@ -100,7 +169,29 @@ async function load() {
   } else state.members = (await api('/members')).members;
   render();
 }
+async function openCommunityTree(id) {
+  try {
+    const data = await api('/communities/' + id + '/tree?limit=25');
+    state.selectedCommunity = id;
+    state.treeRoot = data.root;
+    state.org = { ...data.organization, integration: true };
+    state.stats = data.stats;
+    state.members = [data.root];
+    state.branchPages = {};
+    state.cursor = null;
+    state.history = [null];
+    await focusBranch(data.root.id);
+  } catch (error) {
+    toast(error.message);
+  }
+}
+function moduleEnabled(key) {
+  return !state.paged || state.settings?.superuser || state.settings?.modules?.[key] !== false;
+}
 function render() {
+  if (state.settings?.superuser && !state.selectedCommunity) state.view = 'communities';
+  const viewModule = { access: 'access', dashboard: 'dashboard', fields: 'form' }[state.view];
+  if (viewModule && !moduleEnabled(viewModule)) state.view = 'tree';
   const me = state.user,
     all = state.members;
   const metrics = state.stats || {
@@ -110,10 +201,15 @@ function render() {
     active: all.filter((m) => m.status === 'active').length,
   };
   $('#app').innerHTML =
-    `${navigator.onLine ? '' : '<div class="offline">Sin conexión. La información y los cambios requieren conexión con el servidor.</div>'}<div class="layout"><aside>${brand}<nav class="nav">${state.paged ? '<button data-nav="communities">◉ &nbsp; Comunidades</button>' + (me.role === 'ROOT' ? '<button data-nav="access">⚙ &nbsp; Acceso y foto</button>' : '') : ''}<button data-nav="tree">♧ &nbsp; Mi red</button>${state.paged ? '<button data-nav="dashboard">▥ &nbsp; Dashboard</button>' : ''}${me.role === 'ROOT' ? '<button data-nav="fields">▤ &nbsp; Formulario</button>' : ''}<button id="install" class="install">↓ &nbsp; Instalar aplicación</button></nav><div class="sidebar-bottom">UNA RED, MUCHAS POSIBILIDADES<br>Cada persona hace la diferencia.<br><button id="logout">Cerrar sesión</button></div></aside><main class="main"><header class="topbar"><span>${esc(state.org.name)} &nbsp; / &nbsp; <b>Mi comunidad</b></span><button class="account ghost" id="myProfile">${avatar(me)}<span>${esc(me.name)}<br><small class="muted">${me.role === 'ROOT' ? 'Administrador raíz' : 'Afiliado'}</small></span></button></header>${['dashboard', 'communities', 'access'].includes(state.view) ? '<div id="featurePage"></div>' : state.view === 'superapp' ? '<div id="corePage"></div>' : state.view === 'fields' ? '<div id="fieldsPage"></div>' : `<section class="hero"><div><div class="eyebrow">Personas que conectan</div><h1>Tu red empieza contigo.</h1><p>Visualiza tu comunidad, acompaña a cada persona y sigue creciendo.</p></div><button class="primary" id="addMember">＋ Registrar afiliado</button></section><section class="stats"><div class="stat"><span>AFILIADOS EN TU RED</span><b>${metrics.total}</b><span>Incluye tu cuenta</span></div><div class="stat"><span>AFILIADOS DIRECTOS</span><b>${metrics.direct}</b><span>Conectados contigo</span></div><div class="stat"><span>NIVELES DE TU RED</span><b>${metrics.levels}</b><span>Debajo de tu cuenta</span></div><div class="stat"><span>CUENTAS ACTIVAS</span><b>${metrics.active}</b><span>Afiliaciones activas</span></div></section><div class="toolbar"><div class="tabs"><button data-view="tree" class="${state.view === 'tree' ? 'active' : ''}">♧ Árbol de afiliación</button><button data-view="list" class="${state.view === 'list' ? 'active' : ''}">☷ Directorio</button></div><input id="search" class="search" aria-label="Buscar afiliados" placeholder="Buscar por nombre, correo o ciudad…" value="${esc(state.query)}"></div><section class="board"><div class="board-title"><div><b>${state.view === 'tree' ? 'Así se conecta tu comunidad' : 'Directorio de afiliados'}</b><div class="muted">${me.role === 'ROOT' ? 'Vista completa de tu organización' : 'Tu cuenta y todos tus descendientes'}</div></div><button id="export" class="ghost">↓ CSV</button></div><div id="network"></div></section><p class="footnote">Selecciona una persona para ver su ficha o registrar un afiliado debajo de ella. No hay un límite de cuentas configurado.</p>`}</main></div>`;
+    `${navigator.onLine ? '' : '<div class="offline">Sin conexión. La información y los cambios requieren conexión con el servidor.</div>'}<div class="layout"><aside>${brand}<nav class="nav">${state.paged ? '<button data-nav="communities">◉ &nbsp; Comunidades</button>' + ((!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('access') ? '<button data-nav="access">⚙ &nbsp; Acceso y foto</button>' : '') : ''}${!state.settings?.superuser || state.selectedCommunity ? '<button data-nav="tree">♧ &nbsp; Mi red</button>' : ''}${state.paged && (!state.settings?.superuser || state.selectedCommunity) && moduleEnabled('dashboard') ? '<button data-nav="dashboard">▥ &nbsp; Dashboard</button>' : ''}${(!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('form') ? '<button data-nav="fields">▤ &nbsp; Formulario</button>' : ''}${state.settings?.superuser && state.selectedCommunity ? '<button id="createSelectedCommunity">＋ Crear comunidad</button>' : ''}<button id="install" class="install">↓ &nbsp; Instalar aplicación</button></nav><div class="sidebar-bottom">UNA RED, MUCHAS POSIBILIDADES<br>Cada persona hace la diferencia.<br><button id="logout">Cerrar sesión</button></div></aside><main class="main"><header class="topbar"><span>${esc(state.org.name)} &nbsp; / &nbsp; <b>${state.settings?.superuser ? (state.selectedCommunity ? 'Comunidad seleccionada' : 'Administración de comunidades') : 'Mi comunidad'}</b></span><button class="account ghost" id="myProfile">${avatar(me)}<span>${esc(me.name)}<br><small class="muted">${state.settings?.superuser ? 'Superadministrador' : me.role === 'ROOT' ? 'Administrador raíz' : 'Afiliado'}</small></span></button></header>${['dashboard', 'communities', 'access'].includes(state.view) ? '<div id="featurePage"></div>' : state.view === 'superapp' ? '<div id="corePage"></div>' : state.view === 'fields' ? '<div id="fieldsPage"></div>' : `<section class="hero"><div><div class="eyebrow">Personas que conectan</div><h1>${state.selectedCommunity ? esc(state.org.name) : 'Tu red empieza contigo.'}</h1><p>${state.selectedCommunity ? 'Administra los afiliados, permisos, formulario y dashboard de esta comunidad.' : 'Visualiza tu comunidad, acompaña a cada persona y sigue creciendo.'}</p></div><button class="primary" id="addMember">＋ Registrar afiliado</button></section><section class="stats"><div class="stat"><span>AFILIADOS EN TU RED</span><b>${metrics.total}</b><span>Incluye tu cuenta</span></div><div class="stat"><span>AFILIADOS DIRECTOS</span><b>${metrics.direct}</b><span>Conectados contigo</span></div><div class="stat"><span>NIVELES DE TU RED</span><b>${metrics.levels}</b><span>Debajo de tu cuenta</span></div><div class="stat"><span>CUENTAS ACTIVAS</span><b>${metrics.active}</b><span>Afiliaciones activas</span></div></section><div class="toolbar"><div class="tabs"><button data-view="tree" class="${state.view === 'tree' ? 'active' : ''}">♧ Árbol de afiliación</button><button data-view="list" class="${state.view === 'list' ? 'active' : ''}">☷ Directorio</button></div><input id="search" class="search" aria-label="Buscar afiliados" placeholder="Buscar por nombre, correo o ciudad…" value="${esc(state.query)}"></div><section class="board"><div class="board-title"><div><b>${state.view === 'tree' ? 'Así se conecta tu comunidad' : 'Directorio de afiliados'}</b><div class="muted">${me.role === 'ROOT' ? 'Vista completa de tu organización' : 'Tu cuenta y todos tus descendientes'}</div></div><button id="export" class="ghost">↓ CSV</button></div><div id="network"></div></section><p class="footnote">${state.selectedCommunity ? 'Selecciona una persona para administrar su ficha. Vuelve a Comunidades para elegir otra red.' : 'Selecciona una persona para ver su ficha o registrar un afiliado debajo de ella. No hay un límite de cuentas configurado.'}</p>`}</main></div>`;
   document.querySelectorAll('[data-nav]').forEach(
     (b) =>
       (b.onclick = () => {
+        if (b.dataset.nav === 'communities' && state.settings?.superuser) {
+          state.selectedCommunity = null;
+          load().catch((e) => toast(e.message));
+          return;
+        }
         state.view = b.dataset.nav;
         render();
       }),
@@ -127,15 +223,19 @@ function render() {
       ),
     );
   $('#logout') && ($('#logout').onclick = logout);
-  $('#myProfile').onclick = () => profile(me.id);
+  $('#myProfile').onclick = () => {
+    if (!state.settings?.superuser) profile(me.id);
+  };
   $('#install').onclick = install;
+  if ($('#createSelectedCommunity'))
+    $('#createSelectedCommunity').onclick = () => showCreateCommunity({ superuser: true });
   if (state.view === 'dashboard') renderDashboard();
   else if (state.view === 'communities') renderCommunities();
   else if (state.view === 'access') renderAccess();
   else if (state.view === 'superapp') renderCore();
   else if (state.view === 'fields') renderFields();
   else {
-    $('#addMember').onclick = () => memberForm(null, me.id);
+    $('#addMember').onclick = () => memberForm(null, (state.treeRoot || me).id);
     document.querySelectorAll('[data-view]').forEach(
       (b) =>
         (b.onclick = () => {
@@ -171,7 +271,9 @@ function network() {
     window.AffiliateTree.render(
       $('#network'),
       all,
-      state.paged ? state.members.find((m) => m.id === state.focus) || state.user : state.user,
+      state.paged
+        ? state.members.find((m) => m.id === state.focus) || state.treeRoot || state.user
+        : state.user,
       avatar,
       profile,
       (id) => memberForm(null, id),
@@ -185,7 +287,7 @@ function network() {
           state.stats.total +
           ' afiliados en tu red</span><button id="myTree">Volver a mi raíz</button></div>',
       );
-      $('#myTree').onclick = () => focusBranch(state.user.id);
+      $('#myTree').onclick = () => focusBranch((state.treeRoot || state.user).id);
     }
   } else
     $('#network').innerHTML = filtered.length
@@ -296,7 +398,7 @@ async function memberForm(m, parentId) {
       const r = await post(m ? '/members/' + m.id : '/members', b, m ? 'PUT' : 'POST');
       if (encoded) await post('/members/' + r.member.id + '/photo', { base64: encoded }, 'PUT');
       $('#modal').close();
-      if (m?.id === state.user.id && b.password) {
+      if (!state.selectedCommunity && m?.id === state.user.id && b.password) {
         nativeToken = '';
         csrf = '';
         auth(true);
@@ -396,6 +498,9 @@ function renderFields() {
   };
 }
 async function exportCSV() {
+  const communityName = state.org.name,
+    fields = state.org.fields,
+    membersRoute = scopedRoute('/members');
   let exportMembers = state.members;
   if (state.paged) {
     const button = $('#export');
@@ -404,7 +509,7 @@ async function exportCSV() {
     try {
       let cursor = null;
       do {
-        const page = await api('/members?limit=100' + (cursor ? '&after=' + cursor : ''));
+        const page = await api(membersRoute + '?limit=100' + (cursor ? '&after=' + cursor : ''));
         exportMembers.push(...page.members);
         cursor = page.nextCursor;
         button.textContent = exportMembers.length + ' registros…';
@@ -417,7 +522,6 @@ async function exportCSV() {
       button.textContent = '↓ CSV';
     }
   }
-  const fields = state.org.fields;
   const cell = (v) =>
     '"' +
     String(v ?? '')
@@ -425,8 +529,9 @@ async function exportCSV() {
       .replace(/"/g, '""') +
     '"';
   const rows = [
-    ['Nombre', 'Correo', 'Superior', 'Estado', ...fields.map((f) => f.label)],
+    ['Comunidad', 'Nombre', 'Correo', 'Superior', 'Estado', ...fields.map((f) => f.label)],
     ...exportMembers.map((m) => [
+      communityName,
       m.name,
       m.email,
       exportMembers.find((p) => p.id === m.parentId)?.name || '',

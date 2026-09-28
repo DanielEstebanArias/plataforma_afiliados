@@ -83,6 +83,7 @@ model AffiliateNetwork {
   reviewNote String?
   reviewedAt DateTime?
   reviewedBy String? @db.Uuid
+  modules Json @default("{\"access\":true,\"dashboard\":true,\"form\":true,\"createCommunities\":false}")
   maxLoginLevel Int?
   photo Bytes?
   photoMime String?

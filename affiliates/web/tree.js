@@ -34,6 +34,8 @@ window.AffiliateTree = (() => {
       return n;
     }
     size(root);
+    let panX = 0,
+      panY = 0;
     function draw() {
       const positions = [],
         edges = [],
@@ -77,10 +79,14 @@ window.AffiliateTree = (() => {
       }
       place(root, padding, 0);
       const totalHeight = Math.max(...positions.map((p) => p.y)) + cardHeight + padding;
-      host.innerHTML = `<div class="org-toolbar"><div class="org-legend"><span class="legend-dot"></span> Tu rama <span class="org-separator">/</span> ${members.length} cargados <span class="org-separator">/</span> ${positions.length} visibles</div><div class="org-controls"><button data-action="wide" title="Ampliar el área del árbol">Vista amplia</button><button data-action="expand" title="Desplegar ramas">Desplegar</button><button data-action="fold" title="Mostrar primer nivel">Resumir</button><span class="org-divider"></span><button data-action="minus" aria-label="Reducir zoom">−</button><output aria-label="Nivel de zoom"></output><button data-action="plus" aria-label="Aumentar zoom">＋</button><button data-action="fit" title="Ajustar árbol a la pantalla">⛶ Ajustar</button></div></div><div class="org-viewport" tabindex="0" aria-label="Árbol de afiliación. Desplázate para explorar las ramas."><div class="org-stage"><div class="org-world"><svg class="org-lines" width="${totalWidth}" height="${totalHeight}" aria-hidden="true">${edges.map((e) => `<path d="M ${e.x1} ${e.y1} C ${e.x1} ${e.y1 + 34}, ${e.x2} ${e.y1 + 34}, ${e.x2} ${e.y2}"/>`).join('')}</svg>${positions.map(({ m, depth }) => `<article class="org-card ${m.id === root.id ? 'org-root' : ''} ${m.status === 'inactive' ? 'org-inactive' : ''}" data-card="${m.id}"><div class="org-card-top"><span>${m.id === root.id ? (m.role === 'ROOT' ? 'ENTIDAD RAÍZ' : 'RAÍZ DE ESTA VISTA') : 'NIVEL ' + depth}</span><span class="org-status" title="${m.status === 'active' ? 'Cuenta activa' : 'Cuenta inactiva'}"></span></div><button class="org-person" data-open="${m.id}">${avatar(m)}<span><strong>${escape(m.name)}</strong><small>${escape(m.data.city || m.email)}</small></span></button><div class="org-card-bottom"><button class="org-branch" data-fold="${m.id}" ${children.has(m.id) ? '' : 'disabled'} aria-expanded="${!folded.has(m.id)}" aria-label="${folded.has(m.id) ? 'Expandir' : 'Contraer'} rama de ${escape(m.name)}">${children.has(m.id) ? (folded.has(m.id) ? '⊞' : '⊟') : '○'} ${m.childCount ?? (children.get(m.id) || []).length} directos <span>· ${descendants.get(m.id) || 0} en vista</span></button><button class="org-add" data-add="${m.id}" aria-label="Añadir afiliado debajo de ${escape(m.name)}">＋</button></div>${onLoad && m.hasMore !== false && (m.childCount || 0) > (children.get(m.id) || []).length ? `<button class="org-more" data-load="${m.id}">Cargar rama (${(children.get(m.id) || []).length}/${m.childCount}) ↓</button>` : ''}</article>`).join('')}</div></div></div><div class="org-help"><span>Arrastra el fondo para moverte. Selecciona una persona para abrir su ficha.</span><span>＋ Añade personas a cualquier rama visible</span></div>`;
+      host.innerHTML = `<div class="org-toolbar"><div class="org-legend"><span class="legend-dot"></span> Tu rama <span class="org-separator">/</span> ${members.length} cargados <span class="org-separator">/</span> ${positions.length} visibles</div><div class="org-controls"><button data-action="wide" title="Ampliar el área del árbol">Vista amplia</button><button data-action="expand" title="Desplegar ramas">Desplegar</button><button data-action="fold" title="Mostrar primer nivel">Resumir</button><span class="org-divider"></span><button data-action="minus" aria-label="Reducir zoom">−</button><output aria-label="Nivel de zoom"></output><button data-action="plus" aria-label="Aumentar zoom">＋</button><button data-action="fit" title="Ajustar árbol a la pantalla">⛶ Ajustar</button></div></div><div class="org-viewport" tabindex="0" aria-label="Árbol de afiliación. Desplázate para explorar las ramas."><div class="org-stage"><div class="org-world"><svg class="org-lines" width="${totalWidth}" height="${totalHeight}" aria-hidden="true">${edges.map((e) => `<path d="M ${e.x1} ${e.y1} C ${e.x1} ${e.y1 + 34}, ${e.x2} ${e.y1 + 34}, ${e.x2} ${e.y2}"/>`).join('')}</svg>${positions.map(({ m, depth }) => `<article class="org-card ${m.id === root.id ? 'org-root' : ''} ${m.status === 'inactive' ? 'org-inactive' : ''}" data-card="${m.id}"><div class="org-card-top"><span>${m.id === root.id ? (m.role === 'ROOT' ? 'ENTIDAD RAÍZ' : 'RAÍZ DE ESTA VISTA') : 'NIVEL ' + depth}</span><span class="org-status" title="${m.status === 'active' ? 'Cuenta activa' : 'Cuenta inactiva'}"></span></div><button class="org-person" data-open="${m.id}">${avatar(m)}<span><strong>${escape(m.name)}</strong><small>${escape(m.data.city || m.email)}</small></span></button><div class="org-card-bottom"><button class="org-branch" data-fold="${m.id}" ${children.has(m.id) ? '' : 'disabled'} aria-expanded="${!folded.has(m.id)}" aria-label="${folded.has(m.id) ? 'Expandir' : 'Contraer'} rama de ${escape(m.name)}">${children.has(m.id) ? (folded.has(m.id) ? '⊞' : '⊟') : '○'} ${m.childCount ?? (children.get(m.id) || []).length} directos <span>· ${descendants.get(m.id) || 0} en vista</span></button><button class="org-add" data-add="${m.id}" aria-label="Añadir afiliado debajo de ${escape(m.name)}">＋</button></div>${onLoad && m.hasMore !== false && (m.childCount || 0) > (children.get(m.id) || []).length ? `<button class="org-more" data-load="${m.id}">Cargar rama (${(children.get(m.id) || []).length}/${m.childCount}) ↓</button>` : ''}</article>`).join('')}</div></div></div><div class="org-help"><span>Arrastra el fondo para moverte. Selecciona una persona para abrir su ficha.</span>${onAdd ? '<span>＋ Añade personas a cualquier rama visible</span>' : '<span>Consulta de la comunidad seleccionada</span>'}</div>`;
       const viewport = host.querySelector('.org-viewport'),
         stage = host.querySelector('.org-stage'),
         world = host.querySelector('.org-world');
+      if (!onAdd) host.querySelectorAll('[data-add]').forEach((button) => button.remove());
+      function transform() {
+        world.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      }
       world.style.width = totalWidth + 'px';
       world.style.height = totalHeight + 'px';
       positions.forEach((p) => {
@@ -90,7 +96,7 @@ window.AffiliateTree = (() => {
       });
       function zoom(next, center = true) {
         scale = Math.max(0.25, Math.min(1.6, next));
-        world.style.transform = `scale(${scale})`;
+        transform();
         stage.style.width = totalWidth * scale + 'px';
         stage.style.height = totalHeight * scale + 'px';
         host.querySelector('output').textContent = Math.round(scale * 100) + '%';
@@ -113,6 +119,8 @@ window.AffiliateTree = (() => {
             if (a === 'plus') zoom(scale + 0.15);
             if (a === 'minus') zoom(scale - 0.15);
             if (a === 'fit') {
+              panX = 0;
+              panY = 0;
               zoom(Math.min(1, (viewport.clientWidth - 24) / totalWidth));
               viewport.scrollTop = 0;
             }
@@ -146,21 +154,29 @@ window.AffiliateTree = (() => {
       host.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => onAdd(b.dataset.add)));
       let drag = null;
       viewport.onpointerdown = (e) => {
-        if (e.target.closest('button') || e.pointerType === 'touch') return;
-        drag = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+        if (e.target.closest('button, input, a') || !e.isPrimary || e.button !== 0) return;
+        e.preventDefault();
+        drag = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
         viewport.setPointerCapture(e.pointerId);
         viewport.classList.add('dragging');
       };
       viewport.onpointermove = (e) => {
-        if (drag) {
-          viewport.scrollLeft = drag.left - e.clientX + drag.x;
-          viewport.scrollTop = drag.top - e.clientY + drag.y;
+        if (drag && drag.pointerId === e.pointerId) {
+          e.preventDefault();
+          panX = drag.panX + e.clientX - drag.x;
+          panY = drag.panY + e.clientY - drag.y;
+          transform();
         }
       };
-      viewport.onpointerup = viewport.onpointercancel = () => {
-        drag = null;
-        viewport.classList.remove('dragging');
-      };
+      viewport.onpointerup =
+        viewport.onpointercancel =
+        viewport.onlostpointercapture =
+          () => {
+            if (drag && viewport.hasPointerCapture(drag.pointerId))
+              viewport.releasePointerCapture(drag.pointerId);
+            drag = null;
+            viewport.classList.remove('dragging');
+          };
       zoom(scale);
       loadPhotos();
     }

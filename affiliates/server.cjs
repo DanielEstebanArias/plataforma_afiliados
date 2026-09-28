@@ -124,7 +124,7 @@ function createApp(
     };
     try {
       const url = new URL(req.url, 'http://localhost');
-      const p = url.pathname;
+      let p = url.pathname;
       const method = req.method;
       if (method === 'OPTIONS') {
         res.writeHead(origin && allowed.includes(origin) ? 204 : 403);
@@ -183,25 +183,52 @@ function createApp(
             rates.set(key, rate);
           }
           if (++rate.count > 30) fail(429, 'Demasiados intentos. Espera 15 minutos.');
-          const m = await (
-            await db.prepare('SELECT * FROM members WHERE email=?')
-          ).get(String(b.email).trim().toLowerCase());
+          if (typeof b.password !== 'string' || b.password.length > 200)
+            fail(401, 'Correo o contraseña incorrectos.');
+          let loginDb = db, redirectUrl, loginCookieName = cookieName, loginCookiePath = cookiePath;
+          let m;
+          if (db.loginCandidates && !req.baseUrl) {
+            const candidates = await db.loginCandidates(String(b.email || '').trim().toLowerCase());
+            const matches = [];
+            for (const candidate of candidates) {
+              if (await verify(b.password, candidate.member.password)) matches.push(candidate);
+            }
+            if (!matches.length) fail(401, 'Correo o contraseña incorrectos.');
+            if (matches.length > 1 && !b.communityAppId)
+              return send({ communities: matches.map(({ appId, name }) => ({ appId, name })) });
+            const selected = b.communityAppId
+              ? matches.find((candidate) => candidate.appId === b.communityAppId)
+              : matches[0];
+            if (!selected) fail(401, 'Correo o contraseña incorrectos.');
+            m = selected.member;
+            loginDb = selected.store;
+            // Keep the principal community's existing entry point and cookie.
+            if (selected.appId !== db.appId) {
+              redirectUrl = selected.url;
+              loginCookieName = 'af_' + selected.appId;
+              loginCookiePath = selected.url;
+            }
+          } else {
+            m = await (await db.prepare('SELECT * FROM members WHERE email=?'))
+              .get(String(b.email || '').trim().toLowerCase());
+          }
           if (!m || m.status !== 'active' || !(await verify(b.password, m.password)))
             fail(401, 'Correo o contraseña incorrectos.');
-          if(db.features) await db.features.access(m.id);
+          if(loginDb.features) await loginDb.features.access(m.id);
           const token = crypto.randomBytes(32).toString('hex'),
             csrf = crypto.randomBytes(24).toString('hex');
-          await (await db.prepare('DELETE FROM sessions WHERE expires<?')).run(now);
+          await (await loginDb.prepare('DELETE FROM sessions WHERE expires<?')).run(now);
           await (
-            await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)')
+            await loginDb.prepare('INSERT INTO sessions VALUES(?,?,?,?)')
           ).run(hash(token), m.id, csrf, now + 86400000);
           res.setHeader(
             'Set-Cookie',
-            `${cookieName}=${token}; HttpOnly; SameSite=Lax; Path=${cookiePath}; Max-Age=86400${process.env.SECURE_COOKIES === 'true' ? '; Secure' : ''}`,
+            `${loginCookieName}=${token}; HttpOnly; SameSite=Lax; Path=${loginCookiePath}; Max-Age=86400${process.env.SECURE_COOKIES === 'true' ? '; Secure' : ''}`,
           );
           return send({
             user: { ...publicMember(m), parentId: null },
             csrf,
+            ...(redirectUrl ? { redirectUrl } : {}),
             ...(b.native ? { token } : {}),
           });
         }
@@ -217,12 +244,18 @@ function createApp(
           (await (
             await db.prepare('SELECT * FROM sessions WHERE token=? AND expires>?')
           ).get(hash(token), Date.now()));
-        const me = session && (await member(session.member_id));
+        let me = session && (await member(session.member_id));
         if (!me || me.status !== 'active') fail(401, 'Inicia sesión para continuar.');
         if(db.features) await db.features.access(me.id);
         db.setActor?.(me.id);
         if (method !== 'GET' && req.headers['x-csrf-token'] !== session.csrf)
           fail(403, 'Sesión de formulario inválida. Recarga la página.');
+        const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|members(?:\/[^/]+(?:\/photo)?)?))$/);
+        if (adminRoute) {
+          if (!db.selectCommunity) fail(404, 'Comunidad no disponible.');
+          me = await db.selectCommunity(me, adminRoute[1]);
+          p = '/api' + adminRoute[2];
+        }
         const visible = async (id) => {
           if(db.visible) return db.visible(me.id,id);
           const found = (await branch(me.id)).find((m) => m.id === id);
@@ -240,11 +273,37 @@ function createApp(
             },
           });
         if(db.features){
+          if(p==='/api/communities/export.csv'&&method==='GET') {
+            await db.features.exportCommunities(me, async (chunk) => {
+              if (res.destroyed) throw new Error('Exportación cancelada.');
+              if (!res.headersSent) res.writeHead(200, {
+                'Content-Type':'text/csv; charset=utf-8', 'Cache-Control':'no-store',
+                'Content-Disposition':'attachment; filename="todas-las-comunidades.csv"',
+              });
+              if (!res.write(chunk)) await new Promise((resolve, reject) => {
+                const cleanup = () => { res.off('drain', done); res.off('close', closed); };
+                const done = () => { cleanup(); resolve(); };
+                const closed = () => { cleanup(); reject(new Error('Exportación cancelada.')); };
+                res.once('drain', done); res.once('close', closed);
+              });
+            });
+            return res.end();
+          }
+          const treeRoute=p.match(/^\/api\/communities\/([^/]+)\/tree(?:\/members\/([^/]+)(\/photo)?)?$/);
+          if(treeRoute&&method==='GET'){
+            const result=await db.features.communityTree(me,treeRoute[1],url.searchParams,treeRoute[2],!!treeRoute[3]);
+            if(treeRoute[3]){res.writeHead(200,{'Content-Type':result.mime,'Cache-Control':'no-store'});return res.end(Buffer.from(result.bytes));}
+            return send(result);
+          }
           if(p==='/api/stats'&&method==='GET')return send(await db.features.stats(me.id));
           if(p==='/api/settings'&&['GET','PUT'].includes(method))return send(await db.features.settings(me,method==='PUT'?await body(req):undefined));
           if(p==='/api/communities'&&method==='GET')return send(await db.features.communities(me));
           if(p==='/api/communities'&&method==='POST')return send(await db.features.requestCommunity(me,await body(req)),201);
           if(p==='/api/dashboard'&&['GET','PUT'].includes(method))return send(await db.features.dashboard(me,method==='PUT'?await body(req):undefined,url.searchParams));
+          const moduleRoute=p.match(/^\/api\/communities\/([^/]+)\/modules$/);
+          if(moduleRoute&&method==='PUT')return send(await db.features.updateModules(me,moduleRoute[1],await body(req)));
+          const rootRoute=p.match(/^\/api\/communities\/([^/]+)\/root$/);
+          if(rootRoute&&method==='PUT')return send(await db.features.changeRoot(me,rootRoute[1],await body(req)));
           const community=p.match(/^\/api\/communities\/([^/]+)(\/photo)?$/);
           if(community){
             if(community[2]&&['GET','PUT'].includes(method)){
@@ -255,6 +314,7 @@ function createApp(
               return send(result);
             }
             if(!community[2]&&method==='PUT')return send(await db.features.review(me,community[1],await body(req)));
+            if(!community[2]&&method==='DELETE')return send(await db.features.deleteCommunity(me,community[1],await body(req)));
           }
           if(p==='/api/members'&&method==='GET')return send(await db.features.page(me.id,url.searchParams));
           if(p==='/api/registration'&&method==='GET'){
@@ -276,6 +336,7 @@ function createApp(
           return send({ ok: true });
         }
         if (p === '/api/fields' && method === 'PUT') {
+          if(db.features) await db.features.requireModule('form');
           if (me.role !== 'ROOT') fail(403, 'Solo la entidad raíz configura el formulario.');
           const b = await body(req);
           if (!Array.isArray(b.fields) || b.fields.length > 80)
@@ -418,6 +479,7 @@ function createApp(
       });
       fs.createReadStream(file).pipe(res);
     } catch (e) {
+      if (res.headersSent) { res.destroy(e); return; }
       send(
         {
           error:

@@ -9,3 +9,8 @@ console.log('Esquema de comunidades y paneles preparado.');
 
 const indexed=execFileSync(bin,[...args,'-tAc',`SELECT 1 FROM information_schema.columns WHERE table_name='AffiliateMember' AND column_name='ancestry'`],options).toString().trim();
 if(!indexed){execFileSync(bin,[...args,'-1','-f',path.resolve('prisma/migrations/202609240004_tree_index/migration.sql')],options);}
+
+const modulesReady=execFileSync(bin,[...args,'-tAc',`SELECT 1 FROM information_schema.columns WHERE table_name='AffiliateNetwork' AND column_name='modules'`],options).toString().trim();
+if(!modulesReady){execFileSync(bin,[...args,'-1','-f',path.resolve('prisma/migrations/202609270001_community_modules/migration.sql')],options);}
+
+execFileSync(bin,[...args,'-1','-f',path.resolve('prisma/migrations/202609270002_create_communities_permission/migration.sql')],options);

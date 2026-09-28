@@ -1,3 +1,49 @@
+const moduleLabels = {
+  access: 'Acceso y foto',
+  dashboard: 'Dashboard',
+  form: 'Formulario',
+  createCommunities: 'Crear comunidades',
+};
+async function exportAllCommunities() {
+  const button = $('#exportAllCommunities');
+  button.disabled = true;
+  button.textContent = 'Preparando CSV global…';
+  try {
+    const response = await fetch(apiBase + '/api/communities/export.csv', {
+      headers: nativeToken ? { Authorization: 'Bearer ' + nativeToken } : {},
+    });
+    if (!response.ok) throw new Error((await response.json()).error || 'No se pudo exportar.');
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'todas-las-comunidades.csv';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('CSV global descargado.');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Descargar CSV de todas las comunidades';
+  }
+}
+function moduleInputs(modules = { access: true, dashboard: true, form: true }) {
+  return (
+    '<fieldset><legend>Submódulos habilitados</legend>' +
+    Object.entries(moduleLabels)
+      .map(
+        ([key, label]) =>
+          `<label class="check"><input type="checkbox" name="module_${key}" ${modules[key] ? 'checked' : ''}>${label}</label>`,
+      )
+      .join('') +
+    '</fieldset>'
+  );
+}
+function selectedModules(form) {
+  return Object.fromEntries(
+    Object.keys(moduleLabels).map((key) => [key, form.has('module_' + key)]),
+  );
+}
 async function communityPhotos() {
   for (const img of document.querySelectorAll('[data-community-photo]')) {
     try {
@@ -23,33 +69,44 @@ async function renderCommunities() {
       REJECTED: 'Rechazada',
       SUSPENDED: 'Suspendida',
     };
-    host.innerHTML = `<div class="hero"><div><div class="eyebrow">${result.superuser ? 'Superusuario · revisión y aprobación' : 'Tu espacio de comunidades'}</div><h1>Comunidades que crecen.</h1><p>Las nuevas comunidades necesitan aprobación antes de operar.</p></div><button class="primary" id="requestCommunity">＋ Crear comunidad</button></div><div class="community-grid">${result.communities.map((c) => `<article class="community-card"><div class="community-cover">${c.hasPhoto ? `<img data-community-photo="${c.id}" alt="Foto de ${esc(c.name)}">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="community-body"><span class="badge ${c.approvalStatus === 'APPROVED' ? '' : 'inactive'}">${labels[c.approvalStatus]}</span><h2>${esc(c.name)}</h2><p class="muted">${c.current ? 'Comunidad actual' : c.approvalStatus === 'APPROVED' ? 'Accede con el correo y contraseña de la cuenta raíz asignada.' : 'La cuenta raíz tendrá acceso cuando se apruebe la solicitud.'}</p>${c.reviewNote ? `<p class="review-note">${esc(c.reviewNote)}</p>` : ''}<div class="profile-actions">${c.current ? '<button data-current="true">Ver mi árbol</button>' : c.approvalStatus === 'APPROVED' ? `<a class="button-link" href="${esc(c.url)}">Abrir comunidad →</a>` : ''}${result.superuser && !c.current ? `<button data-review="${c.id}" data-status="APPROVED">Aprobar / habilitar</button><button class="ghost" data-review="${c.id}" data-status="${c.approvalStatus === 'APPROVED' ? 'SUSPENDED' : 'REJECTED'}">${c.approvalStatus === 'APPROVED' ? 'Suspender' : 'Rechazar'}</button>` : ''}${c.canEditPhoto ? `<button class="ghost" data-community-edit="${c.id}">Cambiar foto</button>` : ''}</div></div></article>`).join('')}</div>`;
-    $('#requestCommunity').onclick = () => {
-      modal(
-        'Solicitar una comunidad',
-        `<form id="communityRequest"><p class="form-note">La comunidad quedará pendiente. Serás su cuenta raíz, con tu correo y contraseña actuales; tendrá su propio árbol y formulario.</p><label>Nombre de la comunidad<input name="name" required maxlength="150"></label><label>Foto de la comunidad<input name="photo" type="file" accept="image/*"></label><p class="error" id="communityError"></p><div class="actions"><button class="primary">Enviar solicitud</button></div></form>`,
-      );
-      $('#communityRequest').onsubmit = async (e) => {
-        e.preventDefault();
-        const f = new FormData(e.target),
-          button = e.target.querySelector('button');
-        button.disabled = true;
-        try {
-          const image = f.get('photo');
-          await post('/communities', {
-            name: f.get('name'),
-            ...(image.size ? { base64: await compress(image) } : {}),
-          });
-          $('#modal').close();
-          toast('Comunidad pendiente de aprobación.');
-          await renderCommunities();
-        } catch (e) {
-          $('#communityError').textContent = e.message;
-        } finally {
-          button.disabled = false;
-        }
+    host.innerHTML = `<div class="hero"><div><div class="eyebrow">${result.superuser ? 'Superusuario · revisión y aprobación' : 'Tu espacio de comunidades'}</div><h1>Comunidades que crecen.</h1><p>Las nuevas comunidades necesitan aprobación antes de operar.</p></div>${result.superuser ? '<button id="exportAllCommunities">Descargar CSV de todas las comunidades</button>' : ''}${result.canCreate ? '<button class="primary" id="requestCommunity">＋ Crear comunidad</button>' : ''}</div><div class="community-grid">${result.communities.map((c) => `<article class="community-card"><div class="community-cover">${c.hasPhoto ? `<img data-community-photo="${c.id}" alt="Foto de ${esc(c.name)}">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="community-body"><span class="badge ${c.approvalStatus === 'APPROVED' ? '' : 'inactive'}">${labels[c.approvalStatus]}</span><h2>${esc(c.name)}</h2>${result.superuser && c.root ? `<p class="muted">Usuario raíz: ${esc(c.root.name)}<br>${esc(c.root.email)}</p>` : ''}<p class="muted">${c.current ? 'Comunidad actual' : c.approvalStatus === 'APPROVED' ? 'Accede con el correo y contraseña de la cuenta raíz asignada.' : 'La cuenta raíz tendrá acceso cuando se apruebe la solicitud.'}</p>${c.reviewNote ? `<p class="review-note">${esc(c.reviewNote)}</p>` : ''}<div class="profile-actions">${result.superuser ? `<button class="primary" data-community-tree="${c.id}">Administrar comunidad</button>` : c.current ? '<button data-current="true">Ver mi árbol</button>' : c.approvalStatus === 'APPROVED' ? `<a class="button-link" href="${esc(c.url)}">Abrir comunidad →</a>` : ''}${result.superuser && !c.current ? `<button data-review="${c.id}" data-status="APPROVED">Aprobar / habilitar</button><button class="ghost" data-review="${c.id}" data-status="${c.approvalStatus === 'APPROVED' ? 'SUSPENDED' : 'REJECTED'}">${c.approvalStatus === 'APPROVED' ? 'Suspender' : 'Rechazar'}</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-modules="${c.id}">Configurar submódulos</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-change-root="${c.id}">Cambiar usuario raíz</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-delete-community="${c.id}">Eliminar comunidad</button>` : ''}${c.canEditPhoto ? `<button class="ghost" data-community-edit="${c.id}">Cambiar foto</button>` : ''}</div></div></article>`).join('')}</div>`;
+    if ($('#exportAllCommunities')) $('#exportAllCommunities').onclick = exportAllCommunities;
+    host.querySelectorAll('[data-delete-community]').forEach((button) => {
+      button.onclick = () => {
+        const community = result.communities.find((c) => c.id === button.dataset.deleteCommunity);
+        modal(
+          'Eliminar comunidad',
+          `<form id="deleteCommunityForm"><p>Vas a eliminar permanentemente <strong>${esc(community.name)}</strong>, sus afiliados, fotos, sesiones y formularios. Esta acción no se puede deshacer.</p><label>Escribe el nombre exacto de la comunidad para confirmar<input name="confirmName" required autocomplete="off"></label><p class="error" id="deleteCommunityError"></p><div class="actions"><button type="button" id="cancelDeleteCommunity">Cancelar</button><button class="primary" id="confirmDeleteCommunity" disabled>Eliminar definitivamente</button></div></form>`,
+        );
+        const form = $('#deleteCommunityForm');
+        const submit = $('#confirmDeleteCommunity');
+        form.elements.confirmName.oninput = () => {
+          submit.disabled = form.elements.confirmName.value !== community.name;
+        };
+        $('#cancelDeleteCommunity').onclick = () => $('#modal').close();
+        form.onsubmit = async (event) => {
+          event.preventDefault();
+          submit.disabled = true;
+          try {
+            await post(
+              '/communities/' + community.id,
+              { confirmName: form.elements.confirmName.value },
+              'DELETE',
+            );
+            $('#modal').close();
+            await renderCommunities();
+            toast('Comunidad eliminada.');
+          } catch (error) {
+            $('#deleteCommunityError').textContent = error.message;
+            submit.disabled = form.elements.confirmName.value !== community.name;
+          }
+        };
       };
-    };
+    });
+    if ($('#requestCommunity')) $('#requestCommunity').onclick = () => showCreateCommunity(result);
+    host.querySelectorAll('[data-community-tree]').forEach((button) => {
+      button.onclick = () => openCommunityTree(button.dataset.communityTree);
+    });
     host.querySelectorAll('[data-current]').forEach(
       (b) =>
         (b.onclick = () => {
@@ -84,6 +141,64 @@ async function renderCommunities() {
     host
       .querySelectorAll('[data-community-edit]')
       .forEach((b) => (b.onclick = () => editCommunityPhoto(b.dataset.communityEdit)));
+    host.querySelectorAll('[data-modules]').forEach((button) => {
+      button.onclick = () => {
+        const community = result.communities.find((c) => c.id === button.dataset.modules);
+        modal(
+          'Submódulos de ' + community.name,
+          `<form id="modulesForm">${moduleInputs(community.modules)}<p class="error" id="modulesError"></p><button class="primary">Guardar submódulos</button></form>`,
+        );
+        $('#modulesForm').onsubmit = async (event) => {
+          event.preventDefault();
+          const submit = event.target.querySelector('button');
+          submit.disabled = true;
+          try {
+            await post(
+              '/communities/' + community.id + '/modules',
+              { modules: selectedModules(new FormData(event.target)) },
+              'PUT',
+            );
+            $('#modal').close();
+            await renderCommunities();
+            toast('Submódulos guardados.');
+          } catch (error) {
+            $('#modulesError').textContent = error.message;
+          } finally {
+            submit.disabled = false;
+          }
+        };
+      };
+    });
+    host.querySelectorAll('[data-change-root]').forEach((button) => {
+      button.onclick = () => {
+        const community = result.communities.find((c) => c.id === button.dataset.changeRoot);
+        modal(
+          'Cambiar usuario raíz · ' + community.name,
+          `<form id="changeRootForm"><p class="form-note">Actualiza la cuenta raíz de esta comunidad. Se conserva toda su red de afiliados y se cierran las sesiones anteriores de la cuenta raíz.</p><label>Nombre del usuario raíz<input name="name" value="${esc(community.root?.name || '')}" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="email" type="email" value="${esc(community.root?.email || '')}" required maxlength="254" autocomplete="off"></label><label>Nueva contraseña<input name="password" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label><p class="error" id="changeRootError"></p><button class="primary">Guardar usuario raíz</button></form>`,
+        );
+        $('#changeRootForm').onsubmit = async (event) => {
+          event.preventDefault();
+          const submit = event.target.querySelector('button');
+          submit.disabled = true;
+          try {
+            await post(
+              '/communities/' + community.id + '/root',
+              {
+                root: Object.fromEntries(new FormData(event.target)),
+              },
+              'PUT',
+            );
+            $('#modal').close();
+            await renderCommunities();
+            toast('Usuario raíz actualizado. Ya puede ingresar con sus nuevas credenciales.');
+          } catch (error) {
+            $('#changeRootError').textContent = error.message;
+          } finally {
+            submit.disabled = false;
+          }
+        };
+      };
+    });
     communityPhotos();
   } catch (e) {
     host.textContent = e.message;
@@ -288,6 +403,39 @@ function configureDashboard() {
       toast('Dashboard guardado.');
     } catch (e) {
       $('#dashboardError').textContent = e.message;
+    }
+  };
+}
+
+function showCreateCommunity(result) {
+  modal(
+    'Solicitar una comunidad',
+    `<form id="communityRequest"><p class="form-note">Asigna una cuenta raíz independiente. La comunidad quedará pendiente de aprobación.</p><label>Nombre de la comunidad<input name="name" required maxlength="150"></label><fieldset><legend>Usuario raíz</legend><label>Nombre<input name="rootName" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="rootEmail" type="email" required maxlength="254" autocomplete="off"></label><label>Contraseña<input name="rootPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label></fieldset>${result.superuser ? moduleInputs() : '<p>El superadministrador habilitará los submódulos.</p>'}<label>Foto de la comunidad<input name="photo" type="file" accept="image/*"></label><p class="error" id="communityError"></p><div class="actions"><button class="primary">Enviar solicitud</button></div></form>`,
+  );
+  $('#communityRequest').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target),
+      button = e.target.querySelector('button');
+    button.disabled = true;
+    try {
+      const image = f.get('photo');
+      await post('/communities', {
+        name: f.get('name'),
+        root: {
+          name: f.get('rootName'),
+          email: f.get('rootEmail'),
+          password: f.get('rootPassword'),
+        },
+        modules: selectedModules(f),
+        ...(image.size ? { base64: await compress(image) } : {}),
+      });
+      $('#modal').close();
+      toast('Comunidad pendiente de aprobación.');
+      if (state.view === 'communities') await renderCommunities();
+    } catch (e) {
+      $('#communityError').textContent = e.message;
+    } finally {
+      button.disabled = false;
     }
   };
 }

@@ -69,10 +69,65 @@ const memberRow = (m: any) =>
   };
 /** Compatibility boundary for the existing member API; all production operations use Prisma/RLS. */
 export class AffiliatesStore {
+  async loginCandidates(email: string) {
+    return this.tx(async (tx, n) => {
+      const members = await tx.affiliateMember.findMany({
+        where: { tenantId: n.tenantId, email, status: 'active' },
+        include: { network: { select: { appId: true, name: true } } },
+      });
+      return members.map((m) => ({
+        member: memberRow(m),
+        appId: m.network.appId,
+        name: m.network.name,
+        store: new AffiliatesStore(this.prisma, this.tenantId, m.network.appId),
+        url: `/affiliates/${this.tenantId}/${m.network.appId}/`,
+      }));
+    });
+  }
   readonly features = new NetworkFeatures(this);
-  async visible(viewer:string,target:string){return memberRow(await this.features.visible(viewer,target));}
+  async visible(viewer: string, target: string) {
+    return memberRow(await this.features.visible(viewer, target));
+  }
   readonly integrated = true;
-  private requestContext = new AsyncLocalStorage<{ actor: string }>();
+  private requestContext = new AsyncLocalStorage<{
+    actor: string;
+    appId?: string;
+    adminId?: string;
+  }>();
+  get isCommunityAdmin() {
+    return !!this.requestContext.getStore()?.adminId;
+  }
+  get adminActorId() {
+    return this.requestContext.getStore()?.adminId;
+  }
+  get appId() {
+    return this.requestContext.getStore()?.appId || this.defaultAppId;
+  }
+  async selectCommunity(me: any, id: string) {
+    const context = this.requestContext.getStore();
+    if (!context) throw new Error('Missing request context');
+    const result = await this.tx(async (tx, n) => {
+      if (!n.platformRoot || me.role !== 'ROOT')
+        throw Object.assign(new Error('Solo el superadministrador administra otras comunidades.'), {
+          status: 403,
+        });
+      if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
+        throw Object.assign(new Error('Comunidad inválida.'), { status: 400 });
+      const target = await tx.affiliateNetwork.findFirst({
+        where: { id, tenantId: this.tenantId },
+      });
+      if (!target) throw Object.assign(new Error('Comunidad no disponible.'), { status: 404 });
+      const root = await tx.affiliateMember.findFirst({
+        where: { networkId: id, tenantId: this.tenantId, role: 'ROOT', parentId: null },
+      });
+      if (!root)
+        throw Object.assign(new Error('La comunidad no tiene usuario raíz.'), { status: 404 });
+      return { appId: target.appId, root: memberRow(root) };
+    });
+    context.appId = result.appId;
+    context.adminId = me.id;
+    return result.root;
+  }
   private get actor() {
     return this.requestContext.getStore()?.actor || 'affiliate-service';
   }
@@ -86,18 +141,22 @@ export class AffiliatesStore {
   constructor(
     readonly prisma: PrismaClient,
     readonly tenantId: string,
-    readonly appId: string,
+    private readonly defaultAppId: string,
   ) {}
-  async tx<T>(fn: (tx: Prisma.TransactionClient, n: any) => Promise<T>): Promise<T> {
+  async tx<T>(
+    fn: (tx: Prisma.TransactionClient, n: any) => Promise<T>,
+    options: { timeout?: number; isolationLevel?: Prisma.TransactionIsolationLevel } = {},
+  ): Promise<T> {
     return this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.tenant_id',${this.tenantId},true)`;
-        const n = await tx.affiliateNetwork.findUniqueOrThrow({
+        const n = await tx.affiliateNetwork.findUnique({
           where: { tenantId_appId: { tenantId: this.tenantId, appId: this.appId } },
         });
+        if (!n) throw Object.assign(new Error('Comunidad no disponible.'), { status: 404 });
         return fn(tx, n);
       },
-      { timeout: 15000 },
+      { timeout: 15000, ...options },
     );
   }
   async catalog() {

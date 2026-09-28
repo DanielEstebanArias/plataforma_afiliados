@@ -1,7 +1,32 @@
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, scrypt } from 'node:crypto';
+import { promisify } from 'node:util';
+const hashPassword = promisify(scrypt);
+const defaultModules = { access: true, dashboard: true, form: true, createCommunities: false };
+function parseModules(value: any) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !(key in defaultModules)) ||
+    ['access', 'dashboard', 'form'].some((key) => typeof value[key] !== 'boolean') ||
+    (value.createCommunities !== undefined && typeof value.createCommunities !== 'boolean')
+  )
+    fail(400, 'Selecciona los submódulos de la comunidad.');
+  return {
+    access: value.access,
+    dashboard: value.dashboard,
+    form: value.form,
+    createCommunities: value.createCommunities ?? false,
+  };
+}
+function requireModule(n: any, key: keyof typeof defaultModules) {
+  if (!n.platformRoot && n.modules?.[key] === false)
+    fail(403, 'Este submódulo no está habilitado para la comunidad.');
+}
 import type { AffiliatesStore } from './store';
 import { createForm, mirrorMember } from './store';
+import { csvLine, exportColumns } from './csv';
 function fail(status: number, message: string): never {
   throw Object.assign(new Error(message), { status });
 }
@@ -49,6 +74,165 @@ function photo(base64: any) {
 }
 export class NetworkFeatures {
   constructor(private store: AffiliatesStore) {}
+  async exportCommunities(me: any, write: (chunk: string) => Promise<void>) {
+    return this.store.tx(
+      async (tx, n) => {
+        if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
+          fail(403, 'Solo el superadministrador exporta todas las comunidades.');
+        const networks = await tx.affiliateNetwork.findMany({
+          where: { tenantId: n.tenantId },
+          select: { id: true, name: true, fields: true },
+          orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        });
+        // Include stored values from fields removed from a community's current form.
+        const savedKeys = await tx.$queryRaw<{ networkId: string; key: string }[]>`
+        SELECT DISTINCT "networkId", jsonb_object_keys(data) AS key FROM "AffiliateMember" WHERE "tenantId"=${n.tenantId}::uuid`;
+        const definitions = networks.map((network) => {
+          const fields = [...(network.fields as any[])];
+          for (const row of savedKeys
+            .filter((row) => row.networkId === network.id)
+            .sort((a, b) => a.key.localeCompare(b.key)))
+            if (!fields.some((f) => f.id === row.key))
+              fields.push({ id: row.key, label: row.key, type: 'campo anterior' });
+          return { ...network, fields };
+        });
+        const { columns, mappings } = exportColumns(definitions);
+        await write(
+          '\ufeff' +
+            csvLine([
+              'Comunidad',
+              'ID comunidad',
+              'ID afiliado',
+              'Nombre',
+              'Correo',
+              'ID superior',
+              'Superior',
+              'Rol',
+              'Estado',
+              'Fecha de registro',
+              'Tiene foto',
+              ...columns.map((c) => c.label),
+            ]),
+        );
+        let records = 0;
+        for (const network of definitions) {
+          const mapping = mappings.get(network.id)!;
+          let cursor: string | undefined;
+          while (true) {
+            const members = await tx.affiliateMember.findMany({
+              where: {
+                tenantId: n.tenantId,
+                networkId: network.id,
+                ...(cursor ? { id: { gt: cursor } } : {}),
+              },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                parentId: true,
+                parent: { select: { name: true } },
+                role: true,
+                status: true,
+                createdAt: true,
+                data: true,
+              },
+              orderBy: { id: 'asc' },
+              take: 1000,
+            });
+            if (!members.length) break;
+            const photos = await tx.$queryRaw<{ id: string; present: boolean }[]>(
+              Prisma.sql`SELECT id, (photo IS NOT NULL) AS present FROM "AffiliateMember" WHERE "tenantId"=${n.tenantId}::uuid AND id::text IN (${Prisma.join(members.map((m) => m.id))})`,
+            );
+            const hasPhoto = new Map(photos.map((p) => [p.id, p.present]));
+            await write(
+              members
+                .map((m) =>
+                  csvLine([
+                    network.name,
+                    network.id,
+                    m.id,
+                    m.name,
+                    m.email,
+                    m.parentId,
+                    m.parent?.name,
+                    m.role,
+                    m.status,
+                    m.createdAt.toISOString(),
+                    hasPhoto.get(m.id) ? 'Sí' : 'No',
+                    ...columns.map((_, index) =>
+                      mapping.has(index) ? ((m.data as any)[mapping.get(index)!] ?? '') : '',
+                    ),
+                  ]),
+                )
+                .join(''),
+            );
+            records += members.length;
+            cursor = members.at(-1)!.id;
+          }
+        }
+        await this.audit(tx, me.id, 'communities.exported', n.id, {
+          communities: networks.length,
+          records,
+        });
+      },
+      { timeout: 120000, isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+  async requireModule(key: keyof typeof defaultModules) {
+    if (this.store.isCommunityAdmin) return;
+    return this.store.tx(async (_tx, n) => requireModule(n, key));
+  }
+  async communityTree(
+    me: any,
+    id: string,
+    params: URLSearchParams,
+    memberId?: string,
+    withPhoto = false,
+  ) {
+    return this.store.tx(async (tx, n) => {
+      if (!n.platformRoot || me.role !== 'ROOT')
+        fail(403, 'Solo el superadministrador consulta árboles de otras comunidades.');
+      const target = await tx.affiliateNetwork.findFirst({
+        where: { id: uuid(id), tenantId: n.tenantId },
+      });
+      if (!target) fail(404, 'Comunidad no disponible.');
+      const root = await tx.affiliateMember.findFirst({
+        where: { networkId: target.id, tenantId: n.tenantId, role: 'ROOT', parentId: null },
+      });
+      if (!root) fail(404, 'La comunidad no tiene una cuenta raíz.');
+      const features = new NetworkFeatures({ tx: (fn: any) => fn(tx, target) } as AffiliatesStore);
+      if (memberId) {
+        const member = await features.visible(root.id, memberId);
+        if (withPhoto) {
+          if (!member.photo) fail(404, 'El afiliado no tiene foto.');
+          return { bytes: member.photo, mime: member.mime };
+        }
+        return { member: clean(member) };
+      }
+      const page = await features.page(root.id, params);
+      return {
+        ...page,
+        root: clean(root),
+        organization: { name: target.name, fields: target.fields },
+        stats: await features.stats(root.id),
+      };
+    });
+  }
+  async updateModules(me: any, id: string, b: any) {
+    return this.store.tx(async (tx, n) => {
+      if (!n.platformRoot || me.role !== 'ROOT')
+        fail(403, 'Solo el superadministrador habilita submódulos.');
+      const target = await tx.affiliateNetwork.findFirst({
+        where: { id: uuid(id), tenantId: n.tenantId },
+      });
+      if (!target || target.platformRoot)
+        fail(403, 'Comunidad no disponible para configurar submódulos.');
+      const modules = parseModules(b.modules);
+      await tx.affiliateNetwork.update({ where: { id }, data: { modules } });
+      await this.audit(tx, me.id, 'community.modules.updated', id, { modules });
+      return { modules };
+    });
+  }
   async access(id: string) {
     return this.store.tx(async (tx, n) => {
       if (n.approvalStatus !== 'APPROVED')
@@ -63,6 +247,67 @@ export class NetworkFeatures {
         fail(403, 'Tu afiliación está registrada, pero tu nivel no tiene acceso a la app.');
       return { level, maxLoginLevel: n.maxLoginLevel, superuser: n.platformRoot };
     });
+  }
+  async changeRoot(me: any, id: string, b: any) {
+    try {
+      return await this.store.tx(async (tx, n) => {
+        if (!n.platformRoot || me.role !== 'ROOT')
+          fail(403, 'Solo el superadministrador cambia el usuario raíz.');
+        const target = await tx.affiliateNetwork.findFirst({
+          where: { id: uuid(id), tenantId: n.tenantId },
+        });
+        if (!target || target.platformRoot)
+          fail(403, 'Comunidad no disponible para cambiar su raíz.');
+        const input = b?.root;
+        if (
+          !input ||
+          typeof input.name !== 'string' ||
+          !input.name.trim() ||
+          input.name.length > 150 ||
+          typeof input.email !== 'string' ||
+          input.email.length > 254 ||
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())
+        )
+          fail(400, 'Indica nombre y correo válidos para el usuario raíz.');
+        if (
+          typeof input.password !== 'string' ||
+          input.password.length < 10 ||
+          input.password.length > 200
+        )
+          fail(400, 'La nueva contraseña debe tener entre 10 y 200 caracteres.');
+        const root = await tx.affiliateMember.findFirst({
+          where: { tenantId: n.tenantId, networkId: target.id, role: 'ROOT', parentId: null },
+        });
+        if (!root) fail(404, 'No se encontró el usuario raíz de esta comunidad.');
+        const email = input.email.trim().toLowerCase();
+        const duplicate = await tx.affiliateMember.findFirst({
+          where: { tenantId: n.tenantId, networkId: target.id, email, id: { not: root.id } },
+          select: { id: true },
+        });
+        if (duplicate) fail(409, 'Ese correo ya pertenece a otro afiliado de la comunidad.');
+        const salt = randomBytes(16).toString('hex');
+        const password =
+          salt + ':' + ((await hashPassword(input.password, salt, 64)) as Buffer).toString('hex');
+        const updated = await tx.affiliateMember.update({
+          where: { id: root.id },
+          data: { name: input.name.trim(), email, password, status: 'active' },
+        });
+        await mirrorMember(tx, target, updated);
+        await tx.affiliateSession.deleteMany({
+          where: { networkId: target.id, memberId: root.id },
+        });
+        await this.audit(tx, me.id, 'community.root.changed', target.id, {
+          memberId: root.id,
+          previousEmail: root.email,
+          email,
+        });
+        return { root: { id: updated.id, name: updated.name, email: updated.email } };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        fail(409, 'Ese correo ya pertenece a otro afiliado de la comunidad.');
+      throw error;
+    }
   }
   async registration(parent: string) {
     return this.store.tx(async (tx, n) => ({
@@ -120,6 +365,7 @@ export class NetworkFeatures {
   async settings(me: any, b?: any) {
     return this.store.tx(async (tx, n) => {
       if (b !== undefined) {
+        if (!this.store.isCommunityAdmin) requireModule(n, 'access');
         if (me.role !== 'ROOT') fail(403, 'Solo la raíz configura el acceso.');
         const limit = b.maxLoginLevel;
         if (limit !== null && (!Number.isInteger(limit) || limit < 0 || limit > 10000))
@@ -133,7 +379,10 @@ export class NetworkFeatures {
         name: n.name,
         status: n.approvalStatus,
         maxLoginLevel: n.maxLoginLevel,
-        superuser: me.role === 'ROOT' && n.platformRoot,
+        modules: n.platformRoot
+          ? { ...defaultModules, createCommunities: true }
+          : { ...defaultModules, ...n.modules },
+        superuser: this.store.isCommunityAdmin || (me.role === 'ROOT' && n.platformRoot),
         hasPhoto: !!n.photo,
       };
     });
@@ -154,6 +403,17 @@ export class NetworkFeatures {
           reviewNote: true,
           maxLoginLevel: true,
           requestedBy: true,
+          modules: true,
+          platformRoot: true,
+          ...(superuser
+            ? {
+                members: {
+                  where: { role: 'ROOT', parentId: null },
+                  select: { id: true, name: true, email: true },
+                  take: 1,
+                },
+              }
+            : {}),
           reviewedAt: true,
         },
         orderBy: { name: 'asc' },
@@ -167,12 +427,17 @@ export class NetworkFeatures {
       const images = new Map(photos.map((p) => [p.id, p.present]));
       return {
         superuser,
-        communities: rows.map((c) => ({
+        canCreate:
+          me.role === 'ROOT' && (superuser || (n.modules as any)?.createCommunities === true),
+        communities: rows.map(({ members, ...c }) => ({
           ...c,
+          ...(superuser ? { root: members?.[0] ?? null } : {}),
           hasPhoto: !!images.get(c.id),
           current: c.id === n.id,
           canEditPhoto:
-            superuser || c.requestedBy === me.id || (c.id === n.id && me.role === 'ROOT'),
+            superuser ||
+            ((c.modules as any)?.access !== false &&
+              (c.requestedBy === me.id || (c.id === n.id && me.role === 'ROOT'))),
           url: `/affiliates/${n.tenantId}/${c.appId}/`,
         })),
       };
@@ -181,12 +446,42 @@ export class NetworkFeatures {
   async requestCommunity(me: any, b: any) {
     if (typeof b.name !== 'string' || !b.name.trim() || b.name.length > 150)
       fail(400, 'Escribe el nombre de la comunidad (máximo 150 caracteres).');
+    const rootInput = b.root;
+    if (
+      !rootInput ||
+      typeof rootInput.name !== 'string' ||
+      !rootInput.name.trim() ||
+      rootInput.name.length > 150 ||
+      typeof rootInput.email !== 'string' ||
+      rootInput.email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rootInput.email.trim())
+    )
+      fail(400, 'Indica nombre y correo válidos para el usuario raíz.');
+    if (
+      typeof rootInput.password !== 'string' ||
+      rootInput.password.length < 10 ||
+      rootInput.password.length > 200
+    )
+      fail(400, 'La contraseña debe tener entre 10 y 200 caracteres.');
+    const modules = parseModules(b.modules);
+    const salt = randomBytes(16).toString('hex');
+    const password =
+      salt + ':' + ((await hashPassword(rootInput.password, salt, 64)) as Buffer).toString('hex');
     const image = b.base64 ? photo(b.base64) : {};
     return this.store.tx(async (tx, n) => {
       const id = randomUUID(),
         appId = randomUUID(),
         rootId = randomUUID();
-      const owner = await tx.affiliateMember.findUniqueOrThrow({ where: { id: me.id } });
+      if (
+        me.role !== 'ROOT' ||
+        (!this.store.isCommunityAdmin && !n.platformRoot && n.modules?.createCommunities !== true)
+      )
+        fail(403, 'Tu comunidad no tiene permiso para crear comunidades.');
+      if (
+        !(this.store.isCommunityAdmin || (n.platformRoot && me.role === 'ROOT')) &&
+        Object.values(modules).some((enabled) => enabled)
+      )
+        fail(403, 'Solo el superadministrador habilita submódulos.');
       await tx.app.create({
         data: {
           id: appId,
@@ -204,7 +499,8 @@ export class NetworkFeatures {
           name: b.name.trim(),
           fields: n.fields as any,
           schemaId: schema.id,
-          requestedBy: me.id,
+          requestedBy: this.store.adminActorId || me.id,
+          modules,
           approvalStatus: 'PENDING',
           platformRoot: false,
           ...image,
@@ -215,11 +511,11 @@ export class NetworkFeatures {
           id: rootId,
           tenantId: n.tenantId,
           networkId: id,
-          name: owner.name,
-          email: owner.email,
-          password: owner.password,
+          name: rootInput.name.trim(),
+          email: rootInput.email.trim().toLowerCase(),
+          password,
           role: 'ROOT',
-          data: owner.data as any,
+          data: {},
         },
       });
       await mirrorMember(tx, network, root);
@@ -229,6 +525,32 @@ export class NetworkFeatures {
         status: 'PENDING',
         message: 'Solicitud enviada. El superusuario debe aprobarla antes de ingresar.',
       };
+    });
+  }
+  async deleteCommunity(me: any, id: string, b: any) {
+    return this.store.tx(async (tx, n) => {
+      if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
+        fail(403, 'Solo el superusuario puede eliminar comunidades.');
+      uuid(id);
+      await tx.$queryRaw`SELECT id FROM "AffiliateNetwork" WHERE id=${id}::uuid AND "tenantId"=${n.tenantId}::uuid FOR UPDATE`;
+      const target = await tx.affiliateNetwork.findFirst({ where: { id, tenantId: n.tenantId } });
+      if (!target) fail(404, 'Comunidad no disponible.');
+      if (target.platformRoot || target.id === n.id)
+        fail(403, 'No se puede eliminar la comunidad del superusuario.');
+      if (typeof b?.confirmName !== 'string' || b.confirmName !== target.name)
+        fail(400, 'Escribe el nombre exacto de la comunidad para confirmar la eliminación.');
+      const members = await tx.affiliateMember.count({
+        where: { networkId: id, tenantId: n.tenantId },
+      });
+      // Cascades remove affiliates, photos, sessions and form records atomically.
+      await tx.affiliateNetwork.delete({ where: { tenantId_id: { tenantId: n.tenantId, id } } });
+      await tx.app.delete({ where: { tenantId_id: { tenantId: n.tenantId, id: target.appId } } });
+      await this.audit(tx, me.id, 'community.deleted', id, {
+        name: target.name,
+        appId: target.appId,
+        members,
+      });
+      return { ok: true };
     });
   }
   async review(me: any, id: string, b: any) {
@@ -275,6 +597,7 @@ export class NetworkFeatures {
       )
         fail(404, 'Comunidad no disponible.');
       if (base64 !== undefined) {
+        if (!(n.platformRoot && me.role === 'ROOT')) requireModule(target, 'access');
         if (
           !(n.platformRoot && me.role === 'ROOT') &&
           !(target.id === n.id && me.role === 'ROOT') &&
@@ -291,6 +614,7 @@ export class NetworkFeatures {
   }
   async dashboard(me: any, b?: any, filters = new URLSearchParams()) {
     return this.store.tx(async (tx, n) => {
+      if (!this.store.isCommunityAdmin) requireModule(n, 'dashboard');
       const member = await tx.affiliateMember.findUniqueOrThrow({ where: { id: me.id } });
       const fields = n.fields as any[];
       const defaults = [
@@ -319,6 +643,7 @@ export class NetworkFeatures {
       }
       if (b !== undefined) {
         await tx.affiliateMember.update({ where: { id: me.id }, data: { dashboard: widgets } });
+        await this.audit(tx, me.id, 'community.dashboard.updated', n.id, { memberId: me.id });
         return { ok: true };
       }
       const from = filters.get('from'),
@@ -376,7 +701,7 @@ export class NetworkFeatures {
     return tx.auditLog.create({
       data: {
         tenantId: this.store.tenantId,
-        actor: 'affiliate:' + actor,
+        actor: 'affiliate:' + (this.store.adminActorId || actor),
         action,
         resourceId,
         details,

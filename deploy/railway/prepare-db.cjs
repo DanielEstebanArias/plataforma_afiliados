@@ -20,9 +20,10 @@ function main(){
   if(sql(`SELECT to_regclass('public."Tenant"');`))throw new Error('Base parcial o de otro perfil: no se modificó su esquema. Usa una base vacía o restaura el respaldo completo.');
   sql('BEGIN;\n'+fs.readFileSync(path.join(__dirname,'core.sql'),'utf8')+'\n'+fs.readFileSync('prisma/migrations/202609240002_affiliates/migration.sql','utf8')+'\nCOMMIT;');
  }
- for(const [table,column,migration] of [['AffiliateNetwork','approvalStatus','202609240003_communities'],['AffiliateMember','ancestry','202609240004_tree_index']]){
+ for(const [table,column,migration] of [['AffiliateNetwork','approvalStatus','202609240003_communities'],['AffiliateMember','ancestry','202609240004_tree_index'],['AffiliateNetwork','modules','202609270001_community_modules']]){
   if(!sql(`SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='${table}' AND column_name='${column}';`))sql('BEGIN;\n'+fs.readFileSync(`prisma/migrations/${migration}/migration.sql`,'utf8')+'\nCOMMIT;');
  }
+ sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202609270002_create_communities_permission/migration.sql','utf8')+'\nCOMMIT;');
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;
