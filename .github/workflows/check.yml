@@ -46,7 +46,11 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: cp .env.example .env && docker compose up -d --wait db redis
+      # CI supplies database credentials through job env; the API env_file is
+      # required by Compose parsing even when only db and redis are started.
+      - run: |
+          touch .env
+          docker compose up -d --wait db redis
       - run: npm ci && npx prisma generate && npx prisma migrate deploy
       - run: npm run test:integration
       - if: always()
