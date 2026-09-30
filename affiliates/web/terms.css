@@ -1,0 +1,8 @@
+.terms-gate { max-width: 900px; margin: 32px auto; padding: 16px; }
+.terms-card { padding: 24px; margin-bottom: 24px; }
+.terms-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 55vh; overflow-y: auto; line-height: 1.7; padding: 16px; border: 1px solid #dce5df; border-radius: 12px; margin: 16px 0; }
+.terms-check { display: flex; align-items: flex-start; gap: 12px; margin: 20px 0; }
+.terms-check input { width: auto; margin-top: 4px; }
+.terms-card textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #dce5df; border-radius: 10px; font: inherit; resize: vertical; }
+.terms-card details { padding: 12px 0; }
+.terms-card summary { cursor: pointer; }

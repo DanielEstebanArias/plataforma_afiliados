@@ -19,6 +19,7 @@ model Tenant {
   apps               App[]
   members            Membership[]
   apiKeys            ApiKey[]
+  affiliateTerms     AffiliateTermsVersion[]
 }
 
 model Membership {
@@ -114,6 +115,7 @@ model AffiliateMember {
   parent AffiliateMember? @relation("AffiliateTree", fields: [tenantId, networkId, parentId], references: [tenantId, networkId, id])
   children AffiliateMember[] @relation("AffiliateTree")
   sessions AffiliateSession[]
+  termsAcceptances AffiliateTermsAcceptance[]
   @@unique([tenantId, networkId, id])
   @@unique([tenantId, networkId, email])
   @@index([tenantId, networkId, parentId])
@@ -128,6 +130,31 @@ model AffiliateSession {
   expires BigInt
   member AffiliateMember @relation(fields: [tenantId, networkId, memberId], references: [tenantId, networkId, id], onDelete: Cascade)
   @@index([tenantId, networkId, memberId])
+}
+
+model AffiliateTermsVersion {
+  id String @id @db.Uuid
+  tenantId String @db.Uuid
+  version Int
+  title String
+  content String
+  publishedBy String @db.Uuid
+  publishedAt DateTime @default(now()) @db.Timestamp(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  acceptances AffiliateTermsAcceptance[]
+  @@unique([tenantId, version])
+  @@unique([tenantId, id])
+}
+
+model AffiliateTermsAcceptance {
+  tenantId String @db.Uuid
+  networkId String @db.Uuid
+  memberId String @db.Uuid
+  versionId String @db.Uuid
+  acceptedAt DateTime @default(now()) @db.Timestamp(3)
+  member AffiliateMember @relation(fields: [tenantId, networkId, memberId], references: [tenantId, networkId, id], onDelete: Cascade)
+  version AffiliateTermsVersion @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+  @@id([tenantId, memberId, versionId])
 }
 
 model Asset {

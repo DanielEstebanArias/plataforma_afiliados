@@ -24,9 +24,12 @@ function main(){
   if(!sql(`SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='${table}' AND column_name='${column}';`))sql('BEGIN;\n'+fs.readFileSync(`prisma/migrations/${migration}/migration.sql`,'utf8')+'\nCOMMIT;');
  }
  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202609270002_create_communities_permission/migration.sql','utf8')+'\nCOMMIT;');
+ if(!sql(`SELECT to_regclass('public."AffiliateTermsVersion"');`))
+  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202609290001_affiliate_terms/migration.sql','utf8')+'\nCOMMIT;');
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;
+ REVOKE UPDATE,DELETE ON "AffiliateTermsVersion","AffiliateTermsAcceptance" FROM superapp_runtime;
  DO $$ DECLARE n text; BEGIN
  FOR n IN SELECT nspname FROM pg_namespace WHERE nspname ~ '^tenant_[0-9a-f]{32}$' LOOP
  EXECUTE format('GRANT USAGE ON SCHEMA %I TO superapp_runtime',n);

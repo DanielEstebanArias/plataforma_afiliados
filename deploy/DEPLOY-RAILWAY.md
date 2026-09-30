@@ -119,6 +119,8 @@ En el servicio de la aplicación: Settings → Networking → Custom Domain, y c
 
 ## Validación incluida
 
+Para incorporar términos y condiciones a una instalación existente, consultar `../docs/terms-and-conditions.md`. Aplicar la migración con el preparador actualizado antes de desplegar el nuevo código; la primera publicación se realiza después desde el superusuario.
+
 - Compilación TypeScript y prueba de configuración Railway (`npm run affiliates:deploy:test`).
 - Arranque real del perfil de producción sobre una base PostgreSQL temporal aislada; preparación repetible, creación de raíz, healthcheck, interfaz servida en raíz y comunidad, login, cookies seguras, alcance de comunidad, mismo origen aceptado y rechazo de origen ajeno. Requiere `affiliates/data/superapp-local.json`; sin ese archivo la prueba se omite.
 - No se ha desplegado ni transferido ningún dato a Railway. Falta validar en el servicio real con tu cuenta y dominio.
