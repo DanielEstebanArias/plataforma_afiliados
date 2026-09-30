@@ -250,6 +250,15 @@ function createApp(
         db.setActor?.(me.id);
         if (method !== 'GET' && req.headers['x-csrf-token'] !== session.csrf)
           fail(403, 'Sesión de formulario inválida. Recarga la página.');
+        if (db.terms) {
+          if (p === '/api/terms' && method === 'GET') return send(await db.terms.status(me));
+          if (p === '/api/terms/accept' && method === 'POST') return send(await db.terms.accept(me, await body(req)));
+          if (p === '/api/terms/manage' && method === 'GET') return send(await db.terms.history(me));
+          if (p === '/api/terms/publish' && method === 'POST') return send(await db.terms.publish(me, await body(req)), 201);
+          // Check the actual signed-in account before switching to a community root.
+          if (!(p === '/api/me' && method === 'GET') && !(p === '/api/logout' && method === 'POST'))
+            await db.terms.requireAccepted(me);
+        }
         const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|members(?:\/[^/]+(?:\/photo)?)?))$/);
         if (adminRoute) {
           if (!db.selectCommunity) fail(404, 'Comunidad no disponible.');
@@ -266,6 +275,7 @@ function createApp(
           return send({
             user: { ...publicMember(me), parentId: null },
             csrf: session.csrf,
+            ...(db.terms ? { terms: await db.terms.status(me) } : {}),
             organization: {
               name: (await org()).name,
               fields: JSON.parse((await org()).fields),

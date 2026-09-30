@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { FieldSchema } from '../contracts/app-config.schema';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { NetworkFeatures } from './features';
+import { AffiliateTerms } from './terms';
 
 type Field = { id: string; label: string; type: string; required: boolean; options?: string[] };
 export const column = (id: string) =>
@@ -85,6 +86,7 @@ export class AffiliatesStore {
     });
   }
   readonly features = new NetworkFeatures(this);
+  readonly terms = new AffiliateTerms(this);
   async visible(viewer: string, target: string) {
     return memberRow(await this.features.visible(viewer, target));
   }

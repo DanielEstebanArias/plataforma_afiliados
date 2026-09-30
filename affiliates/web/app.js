@@ -32,7 +32,14 @@ async function api(route, options = {}) {
     },
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'No se pudo conectar.');
+  if (!response.ok) {
+    if (response.status === 428) {
+      state.selectedCommunity = null;
+      const terms = await api('/terms');
+      renderTermsAcceptance(terms);
+    }
+    throw Object.assign(new Error(data.error || 'No se pudo conectar.'), { status: response.status });
+  }
   return data;
 }
 const post = (route, data, method = 'POST') =>
@@ -120,7 +127,7 @@ function auth(configured) {
       }
       await load();
     } catch (error) {
-      $('#authError').textContent = error.message;
+      if (error.status !== 428) $('#authError').textContent = error.message;
     } finally {
       button.disabled = false;
     }
@@ -138,6 +145,13 @@ async function load() {
   csrf = me.csrf;
   state.user = me.user;
   state.org = me.organization;
+  state.pendingTerms = me.terms || null;
+  if (me.terms?.required) {
+    state.members = [];
+    state.settings = null;
+    renderTermsAcceptance(me.terms);
+    return;
+  }
   state.paged = !!state.org.integration;
   if (state.paged) {
     const settings = await api('/settings');
@@ -189,7 +203,8 @@ function moduleEnabled(key) {
   return !state.paged || state.settings?.superuser || state.settings?.modules?.[key] !== false;
 }
 function render() {
-  if (state.settings?.superuser && !state.selectedCommunity) state.view = 'communities';
+  if (state.pendingTerms?.required) return renderTermsAcceptance(state.pendingTerms);
+  if (state.settings?.superuser && !state.selectedCommunity && state.view !== 'terms') state.view = 'communities';
   const viewModule = { access: 'access', dashboard: 'dashboard', fields: 'form' }[state.view];
   if (viewModule && !moduleEnabled(viewModule)) state.view = 'tree';
   const me = state.user,
@@ -201,7 +216,7 @@ function render() {
     active: all.filter((m) => m.status === 'active').length,
   };
   $('#app').innerHTML =
-    `${navigator.onLine ? '' : '<div class="offline">Sin conexión. La información y los cambios requieren conexión con el servidor.</div>'}<div class="layout"><aside>${brand}<nav class="nav">${state.paged ? '<button data-nav="communities">◉ &nbsp; Comunidades</button>' + ((!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('access') ? '<button data-nav="access">⚙ &nbsp; Acceso y foto</button>' : '') : ''}${!state.settings?.superuser || state.selectedCommunity ? '<button data-nav="tree">♧ &nbsp; Mi red</button>' : ''}${state.paged && (!state.settings?.superuser || state.selectedCommunity) && moduleEnabled('dashboard') ? '<button data-nav="dashboard">▥ &nbsp; Dashboard</button>' : ''}${(!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('form') ? '<button data-nav="fields">▤ &nbsp; Formulario</button>' : ''}${state.settings?.superuser && state.selectedCommunity ? '<button id="createSelectedCommunity">＋ Crear comunidad</button>' : ''}<button id="install" class="install">↓ &nbsp; Instalar aplicación</button></nav><div class="sidebar-bottom">UNA RED, MUCHAS POSIBILIDADES<br>Cada persona hace la diferencia.<br><button id="logout">Cerrar sesión</button></div></aside><main class="main"><header class="topbar"><span>${esc(state.org.name)} &nbsp; / &nbsp; <b>${state.settings?.superuser ? (state.selectedCommunity ? 'Comunidad seleccionada' : 'Administración de comunidades') : 'Mi comunidad'}</b></span><button class="account ghost" id="myProfile">${avatar(me)}<span>${esc(me.name)}<br><small class="muted">${state.settings?.superuser ? 'Superadministrador' : me.role === 'ROOT' ? 'Administrador raíz' : 'Afiliado'}</small></span></button></header>${['dashboard', 'communities', 'access'].includes(state.view) ? '<div id="featurePage"></div>' : state.view === 'superapp' ? '<div id="corePage"></div>' : state.view === 'fields' ? '<div id="fieldsPage"></div>' : `<section class="hero"><div><div class="eyebrow">Personas que conectan</div><h1>${state.selectedCommunity ? esc(state.org.name) : 'Tu red empieza contigo.'}</h1><p>${state.selectedCommunity ? 'Administra los afiliados, permisos, formulario y dashboard de esta comunidad.' : 'Visualiza tu comunidad, acompaña a cada persona y sigue creciendo.'}</p></div><button class="primary" id="addMember">＋ Registrar afiliado</button></section><section class="stats"><div class="stat"><span>AFILIADOS EN TU RED</span><b>${metrics.total}</b><span>Incluye tu cuenta</span></div><div class="stat"><span>AFILIADOS DIRECTOS</span><b>${metrics.direct}</b><span>Conectados contigo</span></div><div class="stat"><span>NIVELES DE TU RED</span><b>${metrics.levels}</b><span>Debajo de tu cuenta</span></div><div class="stat"><span>CUENTAS ACTIVAS</span><b>${metrics.active}</b><span>Afiliaciones activas</span></div></section><div class="toolbar"><div class="tabs"><button data-view="tree" class="${state.view === 'tree' ? 'active' : ''}">♧ Árbol de afiliación</button><button data-view="list" class="${state.view === 'list' ? 'active' : ''}">☷ Directorio</button></div><input id="search" class="search" aria-label="Buscar afiliados" placeholder="Buscar por nombre, correo o ciudad…" value="${esc(state.query)}"></div><section class="board"><div class="board-title"><div><b>${state.view === 'tree' ? 'Así se conecta tu comunidad' : 'Directorio de afiliados'}</b><div class="muted">${me.role === 'ROOT' ? 'Vista completa de tu organización' : 'Tu cuenta y todos tus descendientes'}</div></div><button id="export" class="ghost">↓ CSV</button></div><div id="network"></div></section><p class="footnote">${state.selectedCommunity ? 'Selecciona una persona para administrar su ficha. Vuelve a Comunidades para elegir otra red.' : 'Selecciona una persona para ver su ficha o registrar un afiliado debajo de ella. No hay un límite de cuentas configurado.'}</p>`}</main></div>`;
+    `${navigator.onLine ? '' : '<div class="offline">Sin conexión. La información y los cambios requieren conexión con el servidor.</div>'}<div class="layout"><aside>${brand}<nav class="nav">${state.paged ? '<button data-nav="communities">◉ &nbsp; Comunidades</button>' + ((!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('access') ? '<button data-nav="access">⚙ &nbsp; Acceso y foto</button>' : '') : ''}${!state.settings?.superuser || state.selectedCommunity ? '<button data-nav="tree">♧ &nbsp; Mi red</button>' : ''}${state.paged && (!state.settings?.superuser || state.selectedCommunity) && moduleEnabled('dashboard') ? '<button data-nav="dashboard">▥ &nbsp; Dashboard</button>' : ''}${(!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('form') ? '<button data-nav="fields">▤ &nbsp; Formulario</button>' : ''}${state.settings?.superuser && state.selectedCommunity ? '<button id="createSelectedCommunity">＋ Crear comunidad</button>' : ''}${state.settings?.superuser ? '<button data-nav="terms">▤ &nbsp; Términos y condiciones</button>' : ''}<button id="install" class="install">↓ &nbsp; Instalar aplicación</button></nav><div class="sidebar-bottom">UNA RED, MUCHAS POSIBILIDADES<br>Cada persona hace la diferencia.<br><button id="logout">Cerrar sesión</button></div></aside><main class="main"><header class="topbar"><span>${esc(state.org.name)} &nbsp; / &nbsp; <b>${state.settings?.superuser ? (state.selectedCommunity ? 'Comunidad seleccionada' : 'Administración de comunidades') : 'Mi comunidad'}</b></span><button class="account ghost" id="myProfile">${avatar(me)}<span>${esc(me.name)}<br><small class="muted">${state.settings?.superuser ? 'Superadministrador' : me.role === 'ROOT' ? 'Administrador raíz' : 'Afiliado'}</small></span></button></header>${['dashboard', 'communities', 'access', 'terms'].includes(state.view) ? '<div id="featurePage"></div>' : state.view === 'superapp' ? '<div id="corePage"></div>' : state.view === 'fields' ? '<div id="fieldsPage"></div>' : `<section class="hero"><div><div class="eyebrow">Personas que conectan</div><h1>${state.selectedCommunity ? esc(state.org.name) : 'Tu red empieza contigo.'}</h1><p>${state.selectedCommunity ? 'Administra los afiliados, permisos, formulario y dashboard de esta comunidad.' : 'Visualiza tu comunidad, acompaña a cada persona y sigue creciendo.'}</p></div><button class="primary" id="addMember">＋ Registrar afiliado</button></section><section class="stats"><div class="stat"><span>AFILIADOS EN TU RED</span><b>${metrics.total}</b><span>Incluye tu cuenta</span></div><div class="stat"><span>AFILIADOS DIRECTOS</span><b>${metrics.direct}</b><span>Conectados contigo</span></div><div class="stat"><span>NIVELES DE TU RED</span><b>${metrics.levels}</b><span>Debajo de tu cuenta</span></div><div class="stat"><span>CUENTAS ACTIVAS</span><b>${metrics.active}</b><span>Afiliaciones activas</span></div></section><div class="toolbar"><div class="tabs"><button data-view="tree" class="${state.view === 'tree' ? 'active' : ''}">♧ Árbol de afiliación</button><button data-view="list" class="${state.view === 'list' ? 'active' : ''}">☷ Directorio</button></div><input id="search" class="search" aria-label="Buscar afiliados" placeholder="Buscar por nombre, correo o ciudad…" value="${esc(state.query)}"></div><section class="board"><div class="board-title"><div><b>${state.view === 'tree' ? 'Así se conecta tu comunidad' : 'Directorio de afiliados'}</b><div class="muted">${me.role === 'ROOT' ? 'Vista completa de tu organización' : 'Tu cuenta y todos tus descendientes'}</div></div><button id="export" class="ghost">↓ CSV</button></div><div id="network"></div></section><p class="footnote">${state.selectedCommunity ? 'Selecciona una persona para administrar su ficha. Vuelve a Comunidades para elegir otra red.' : 'Selecciona una persona para ver su ficha o registrar un afiliado debajo de ella. No hay un límite de cuentas configurado.'}</p>`}</main></div>`;
   document.querySelectorAll('[data-nav]').forEach(
     (b) =>
       (b.onclick = () => {
@@ -229,7 +244,8 @@ function render() {
   $('#install').onclick = install;
   if ($('#createSelectedCommunity'))
     $('#createSelectedCommunity').onclick = () => showCreateCommunity({ superuser: true });
-  if (state.view === 'dashboard') renderDashboard();
+  if (state.view === 'terms') renderTermsManagement();
+  else if (state.view === 'dashboard') renderDashboard();
   else if (state.view === 'communities') renderCommunities();
   else if (state.view === 'access') renderAccess();
   else if (state.view === 'superapp') renderCore();
@@ -592,8 +608,8 @@ async function start() {
     const status = await api('/status');
     try {
       await load();
-    } catch {
-      auth(status.configured);
+    } catch (error) {
+      if (error.status !== 428) auth(status.configured);
     }
   } catch {
     $('#app').innerHTML =

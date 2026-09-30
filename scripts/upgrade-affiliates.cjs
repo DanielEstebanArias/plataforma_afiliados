@@ -14,3 +14,5 @@ const modulesReady=execFileSync(bin,[...args,'-tAc',`SELECT 1 FROM information_s
 if(!modulesReady){execFileSync(bin,[...args,'-1','-f',path.resolve('prisma/migrations/202609270001_community_modules/migration.sql')],options);}
 
 execFileSync(bin,[...args,'-1','-f',path.resolve('prisma/migrations/202609270002_create_communities_permission/migration.sql')],options);
+const termsReady=execFileSync(bin,[...args,'-tAc',`SELECT to_regclass('public."AffiliateTermsVersion"')`],options).toString().trim();
+if(!termsReady){execFileSync(bin,[...args,'-1','-f',path.resolve('prisma/migrations/202609290001_affiliate_terms/migration.sql')],options);}
