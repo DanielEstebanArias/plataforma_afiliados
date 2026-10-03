@@ -102,15 +102,20 @@ p {
   justify-content: center;
   align-items: center;
   width: 100%;
+  height: 116px;
 }
 .brand img {
-  width: 58px;
-  height: 58px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  object-position: center;
   display: block;
 }
-.auth-intro .brand { justify-content: flex-start; }
-.auth-intro .brand img { width: 66px; height: 66px; }
+.auth-intro .brand {
+  align-self: center;
+  width: min(100%, 630px);
+  height: 240px;
+}
 .layout {
   display: grid;
   grid-template-columns: 232px 1fr;
@@ -615,6 +620,9 @@ a {
   }
   .auth-intro {
     padding: 30px;
+  }
+  .auth-intro .brand {
+    height: 150px;
   }
   .auth-intro h1 {
     font-size: 30px;
