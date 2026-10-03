@@ -15,6 +15,8 @@ model Tenant {
   subscriptionStatus String       @default("TRIAL")
   quotas             Json         @default("{\"apps\":10,\"aiTokens\":1000000,\"records\":100000}")
   aiTokensUsed       Int          @default(0)
+  platformLogo       Bytes?
+  platformLogoMime   String?
   createdAt          DateTime     @default(now())
   apps               App[]
   members            Membership[]
