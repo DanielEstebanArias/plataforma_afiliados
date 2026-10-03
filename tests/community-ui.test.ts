@@ -57,7 +57,7 @@ test('superadmin starts at communities without requesting or rendering an unsele
   assert.equal(elements.get('#app').innerHTML.includes('data-nav="tree"'), false);
 });
 
-test('CSV includes community on every record across pages and uses selected community endpoint', async () => {
+test('CSV includes subregion on every record across pages and uses selected community endpoint', async () => {
   const { context, exported } = appContext();
   const urls: string[] = [];
   context.fetch = async (url: string) => {
@@ -84,7 +84,7 @@ test('CSV includes community on every record across pages and uses selected comm
   );
   await vm.runInContext('exportCSV()', context);
   const lines = (await exported()!.text()).replace(/^\ufeff/, '').split('\r\n');
-  assert.ok(lines[0].startsWith('"Comunidad";"Nombre"'));
+  assert.ok(lines[0].startsWith('"Subregión";"Nombre"'));
   assert.equal(lines.length, 3);
   for (const line of lines.slice(1)) assert.ok(line.startsWith('"Community ""North""";'));
   assert.deepEqual(urls, [
