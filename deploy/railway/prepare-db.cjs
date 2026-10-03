@@ -26,6 +26,8 @@ function main(){
  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202609270002_create_communities_permission/migration.sql','utf8')+'\nCOMMIT;');
  if(!sql(`SELECT to_regclass('public."AffiliateTermsVersion"');`))
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202609290001_affiliate_terms/migration.sql','utf8')+'\nCOMMIT;');
+ if(!sql(`SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='Tenant' AND column_name='platformLogo';`))
+  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610030001_platform_branding/migration.sql','utf8')+'\nCOMMIT;');
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;

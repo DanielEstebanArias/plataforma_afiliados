@@ -7,6 +7,8 @@ CREATE TABLE "Tenant" (
     "subscriptionStatus" TEXT NOT NULL DEFAULT 'TRIAL',
     "quotas" JSONB NOT NULL DEFAULT '{"apps":10,"aiTokens":1000000,"records":100000}',
     "aiTokensUsed" INTEGER NOT NULL DEFAULT 0,
+    "platformLogo" BYTEA,
+    "platformLogoMime" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Tenant_pkey" PRIMARY KEY ("id")
