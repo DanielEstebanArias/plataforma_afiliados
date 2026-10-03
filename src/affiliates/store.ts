@@ -110,20 +110,20 @@ export class AffiliatesStore {
     if (!context) throw new Error('Missing request context');
     const result = await this.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT')
-        throw Object.assign(new Error('Solo el superadministrador administra otras comunidades.'), {
+        throw Object.assign(new Error('Solo el superadministrador administra otras subregiones.'), {
           status: 403,
         });
       if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
-        throw Object.assign(new Error('Comunidad inválida.'), { status: 400 });
+        throw Object.assign(new Error('Subregión inválida.'), { status: 400 });
       const target = await tx.affiliateNetwork.findFirst({
         where: { id, tenantId: this.tenantId },
       });
-      if (!target) throw Object.assign(new Error('Comunidad no disponible.'), { status: 404 });
+      if (!target) throw Object.assign(new Error('Subregión no disponible.'), { status: 404 });
       const root = await tx.affiliateMember.findFirst({
         where: { networkId: id, tenantId: this.tenantId, role: 'ROOT', parentId: null },
       });
       if (!root)
-        throw Object.assign(new Error('La comunidad no tiene usuario raíz.'), { status: 404 });
+        throw Object.assign(new Error('La subregión no tiene usuario raíz.'), { status: 404 });
       return { appId: target.appId, root: memberRow(root) };
     });
     context.appId = result.appId;
@@ -155,7 +155,7 @@ export class AffiliatesStore {
         const n = await tx.affiliateNetwork.findUnique({
           where: { tenantId_appId: { tenantId: this.tenantId, appId: this.appId } },
         });
-        if (!n) throw Object.assign(new Error('Comunidad no disponible.'), { status: 404 });
+        if (!n) throw Object.assign(new Error('Subregión no disponible.'), { status: 404 });
         return fn(tx, n);
       },
       { timeout: 15000, ...options },

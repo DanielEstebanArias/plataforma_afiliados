@@ -12,7 +12,7 @@ function parseModules(value: any) {
     ['access', 'dashboard', 'form'].some((key) => typeof value[key] !== 'boolean') ||
     (value.createCommunities !== undefined && typeof value.createCommunities !== 'boolean')
   )
-    fail(400, 'Selecciona los submódulos de la comunidad.');
+    fail(400, 'Selecciona los submódulos de la subregión.');
   return {
     access: value.access,
     dashboard: value.dashboard,
@@ -22,7 +22,7 @@ function parseModules(value: any) {
 }
 function requireModule(n: any, key: keyof typeof defaultModules) {
   if (!n.platformRoot && n.modules?.[key] === false)
-    fail(403, 'Este submódulo no está habilitado para la comunidad.');
+    fail(403, 'Este submódulo no está habilitado para la subregión.');
 }
 import type { AffiliatesStore } from './store';
 import { createForm, mirrorMember } from './store';
@@ -74,11 +74,32 @@ function photo(base64: any) {
 }
 export class NetworkFeatures {
   constructor(private store: AffiliatesStore) {}
+  async platformLogo(me?: any, base64?: string) {
+    return this.store.tx(async (tx, n) => {
+      if (base64 !== undefined) {
+        if (!me || !n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
+          fail(403, 'Solo el superadministrador puede cambiar el logo.');
+        const image = photo(base64);
+        await tx.tenant.update({
+          where: { id: n.tenantId },
+          data: { platformLogo: image.photo, platformLogoMime: image.photoMime },
+        });
+        await this.audit(tx, me.id, 'platform.logo.updated', n.tenantId, {});
+        return { ok: true };
+      }
+      const tenant = await tx.tenant.findUnique({
+        where: { id: n.tenantId },
+        select: { platformLogo: true, platformLogoMime: true },
+      });
+      if (!tenant?.platformLogo) fail(404, 'La plataforma no tiene un logo personalizado.');
+      return { bytes: tenant.platformLogo, mime: tenant.platformLogoMime || 'image/png' };
+    });
+  }
   async exportCommunities(me: any, write: (chunk: string) => Promise<void>) {
     return this.store.tx(
       async (tx, n) => {
         if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
-          fail(403, 'Solo el superadministrador exporta todas las comunidades.');
+          fail(403, 'Solo el superadministrador exporta todas las subregiones.');
         const networks = await tx.affiliateNetwork.findMany({
           where: { tenantId: n.tenantId },
           select: { id: true, name: true, fields: true },
@@ -100,8 +121,8 @@ export class NetworkFeatures {
         await write(
           '\ufeff' +
             csvLine([
-              'Comunidad',
-              'ID comunidad',
+              'Subregión',
+              'ID subregión',
               'ID afiliado',
               'Nombre',
               'Correo',
@@ -191,15 +212,15 @@ export class NetworkFeatures {
   ) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT')
-        fail(403, 'Solo el superadministrador consulta árboles de otras comunidades.');
+        fail(403, 'Solo el superadministrador consulta árboles de otras subregiones.');
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target) fail(404, 'Comunidad no disponible.');
+      if (!target) fail(404, 'Subregión no disponible.');
       const root = await tx.affiliateMember.findFirst({
         where: { networkId: target.id, tenantId: n.tenantId, role: 'ROOT', parentId: null },
       });
-      if (!root) fail(404, 'La comunidad no tiene una cuenta raíz.');
+      if (!root) fail(404, 'La subregión no tiene una cuenta raíz.');
       const features = new NetworkFeatures({ tx: (fn: any) => fn(tx, target) } as AffiliatesStore);
       if (memberId) {
         const member = await features.visible(root.id, memberId);
@@ -226,7 +247,7 @@ export class NetworkFeatures {
         where: { id: uuid(id), tenantId: n.tenantId },
       });
       if (!target || target.platformRoot)
-        fail(403, 'Comunidad no disponible para configurar submódulos.');
+        fail(403, 'Subregión no disponible para configurar submódulos.');
       const modules = parseModules(b.modules);
       await tx.affiliateNetwork.update({ where: { id }, data: { modules } });
       await this.audit(tx, me.id, 'community.modules.updated', id, { modules });
@@ -239,8 +260,8 @@ export class NetworkFeatures {
         fail(
           403,
           n.approvalStatus === 'PENDING'
-            ? 'La comunidad está pendiente de aprobación.'
-            : 'La comunidad no está habilitada.',
+            ? 'La subregión está pendiente de aprobación.'
+            : 'La subregión no está habilitada.',
         );
       const level = await depth(tx, n, id);
       if (n.maxLoginLevel !== null && level > n.maxLoginLevel)
@@ -257,7 +278,7 @@ export class NetworkFeatures {
           where: { id: uuid(id), tenantId: n.tenantId },
         });
         if (!target || target.platformRoot)
-          fail(403, 'Comunidad no disponible para cambiar su raíz.');
+          fail(403, 'Subregión no disponible para cambiar su raíz.');
         const input = b?.root;
         if (
           !input ||
@@ -278,13 +299,13 @@ export class NetworkFeatures {
         const root = await tx.affiliateMember.findFirst({
           where: { tenantId: n.tenantId, networkId: target.id, role: 'ROOT', parentId: null },
         });
-        if (!root) fail(404, 'No se encontró el usuario raíz de esta comunidad.');
+        if (!root) fail(404, 'No se encontró el usuario raíz de esta subregión.');
         const email = input.email.trim().toLowerCase();
         const duplicate = await tx.affiliateMember.findFirst({
           where: { tenantId: n.tenantId, networkId: target.id, email, id: { not: root.id } },
           select: { id: true },
         });
-        if (duplicate) fail(409, 'Ese correo ya pertenece a otro afiliado de la comunidad.');
+        if (duplicate) fail(409, 'Ese correo ya pertenece a otro afiliado de la subregión.');
         const salt = randomBytes(16).toString('hex');
         const password =
           salt + ':' + ((await hashPassword(input.password, salt, 64)) as Buffer).toString('hex');
@@ -305,7 +326,7 @@ export class NetworkFeatures {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        fail(409, 'Ese correo ya pertenece a otro afiliado de la comunidad.');
+        fail(409, 'Ese correo ya pertenece a otro afiliado de la subregión.');
       throw error;
     }
   }
@@ -445,7 +466,7 @@ export class NetworkFeatures {
   }
   async requestCommunity(me: any, b: any) {
     if (typeof b.name !== 'string' || !b.name.trim() || b.name.length > 150)
-      fail(400, 'Escribe el nombre de la comunidad (máximo 150 caracteres).');
+      fail(400, 'Escribe el nombre de la subregión (máximo 150 caracteres).');
     const rootInput = b.root;
     if (
       !rootInput ||
@@ -476,7 +497,7 @@ export class NetworkFeatures {
         me.role !== 'ROOT' ||
         (!this.store.isCommunityAdmin && !n.platformRoot && n.modules?.createCommunities !== true)
       )
-        fail(403, 'Tu comunidad no tiene permiso para crear comunidades.');
+        fail(403, 'Tu subregión no tiene permiso para crear subregiones.');
       if (
         !(this.store.isCommunityAdmin || (n.platformRoot && me.role === 'ROOT')) &&
         Object.values(modules).some((enabled) => enabled)
@@ -530,15 +551,15 @@ export class NetworkFeatures {
   async deleteCommunity(me: any, id: string, b: any) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
-        fail(403, 'Solo el superusuario puede eliminar comunidades.');
+        fail(403, 'Solo el superusuario puede eliminar subregiones.');
       uuid(id);
       await tx.$queryRaw`SELECT id FROM "AffiliateNetwork" WHERE id=${id}::uuid AND "tenantId"=${n.tenantId}::uuid FOR UPDATE`;
       const target = await tx.affiliateNetwork.findFirst({ where: { id, tenantId: n.tenantId } });
-      if (!target) fail(404, 'Comunidad no disponible.');
+      if (!target) fail(404, 'Subregión no disponible.');
       if (target.platformRoot || target.id === n.id)
-        fail(403, 'No se puede eliminar la comunidad del superusuario.');
+        fail(403, 'No se puede eliminar la subregión del superusuario.');
       if (typeof b?.confirmName !== 'string' || b.confirmName !== target.name)
-        fail(400, 'Escribe el nombre exacto de la comunidad para confirmar la eliminación.');
+        fail(400, 'Escribe el nombre exacto de la subregión para confirmar la eliminación.');
       const members = await tx.affiliateMember.count({
         where: { networkId: id, tenantId: n.tenantId },
       });
@@ -556,13 +577,13 @@ export class NetworkFeatures {
   async review(me: any, id: string, b: any) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT')
-        fail(403, 'Solo el superusuario aprueba comunidades.');
+        fail(403, 'Solo el superusuario aprueba subregiones.');
       if (!['APPROVED', 'REJECTED', 'SUSPENDED'].includes(b.status)) fail(400, 'Estado inválido.');
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
       if (!target || target.platformRoot)
-        fail(403, 'Esta comunidad no puede modificarse desde solicitudes.');
+        fail(403, 'Esta subregión no puede modificarse desde solicitudes.');
       const note = String(b.note || '')
         .trim()
         .slice(0, 500);
@@ -595,7 +616,7 @@ export class NetworkFeatures {
           (n.platformRoot && me.role === 'ROOT')
         )
       )
-        fail(404, 'Comunidad no disponible.');
+        fail(404, 'Subregión no disponible.');
       if (base64 !== undefined) {
         if (!(n.platformRoot && me.role === 'ROOT')) requireModule(target, 'access');
         if (
@@ -603,12 +624,12 @@ export class NetworkFeatures {
           !(target.id === n.id && me.role === 'ROOT') &&
           target.requestedBy !== me.id
         )
-          fail(403, 'No puedes editar esta comunidad.');
+          fail(403, 'No puedes editar esta subregión.');
         await tx.affiliateNetwork.update({ where: { id }, data: photo(base64) });
         await this.audit(tx, me.id, 'community.photo.updated', id, {});
         return { ok: true };
       }
-      if (!target.photo) fail(404, 'La comunidad no tiene foto.');
+      if (!target.photo) fail(404, 'La subregión no tiene foto.');
       return { bytes: target.photo, mime: target.photoMime };
     });
   }
