@@ -136,8 +136,13 @@ function createApp(
         if (p === '/api/status' && method === 'GET')
           return send({
             configured: !!(await org()),
-            name: (await org())?.name || 'Plataforma Afiliados',
+            name: (await org())?.name || 'Afiliados',
           });
+        if (p === '/api/platform-logo' && method === 'GET' && db.features) {
+          const result = await db.features.platformLogo();
+          res.writeHead(200, { 'Content-Type': result.mime, 'Cache-Control': 'no-cache' });
+          return res.end(Buffer.from(result.bytes));
+        }
         if (p === '/api/setup' && method === 'POST') {
           if (await org()) fail(409, 'La organización ya existe.');
           const b = await body(req);
@@ -261,7 +266,7 @@ function createApp(
         }
         const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|members(?:\/[^/]+(?:\/photo)?)?))$/);
         if (adminRoute) {
-          if (!db.selectCommunity) fail(404, 'Comunidad no disponible.');
+          if (!db.selectCommunity) fail(404, 'Subregión no disponible.');
           me = await db.selectCommunity(me, adminRoute[1]);
           p = '/api' + adminRoute[2];
         }
@@ -283,12 +288,17 @@ function createApp(
             },
           });
         if(db.features){
+          if(p==='/api/platform-logo'&&method==='PUT'){
+            const input=(await body(req)).base64;
+            if(typeof input!=='string') throw Object.assign(new Error('Selecciona una imagen.'),{status:400});
+            return send(await db.features.platformLogo(me,input));
+          }
           if(p==='/api/communities/export.csv'&&method==='GET') {
             await db.features.exportCommunities(me, async (chunk) => {
               if (res.destroyed) throw new Error('Exportación cancelada.');
               if (!res.headersSent) res.writeHead(200, {
                 'Content-Type':'text/csv; charset=utf-8', 'Cache-Control':'no-store',
-                'Content-Disposition':'attachment; filename="todas-las-comunidades.csv"',
+                'Content-Disposition':'attachment; filename="todas-las-subregiones.csv"',
               });
               if (!res.write(chunk)) await new Promise((resolve, reject) => {
                 const cleanup = () => { res.off('drain', done); res.off('close', closed); };
