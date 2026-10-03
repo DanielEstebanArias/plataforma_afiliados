@@ -98,15 +98,19 @@ p {
   color: #699781;
 }
 .brand {
-  font-weight: 750;
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 12px;
-  font-size: 17px;
+  width: 100%;
 }
 .brand img {
-  width: 38px;
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  display: block;
 }
+.auth-intro .brand { justify-content: flex-start; }
+.auth-intro .brand img { width: 66px; height: 66px; }
 .layout {
   display: grid;
   grid-template-columns: 232px 1fr;

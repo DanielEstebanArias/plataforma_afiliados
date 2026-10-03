@@ -1,5 +1,5 @@
 const BASE = new URL(self.registration.scope).pathname;
-const CACHE = 'afiliados-shell-v9-' + BASE;
+const CACHE = 'afiliados-shell-v10-' + BASE;
 const FILES = [
   '',
   'index.html',
