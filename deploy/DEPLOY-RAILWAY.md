@@ -60,7 +60,7 @@ $env:PGDATABASE = $env:DATABASE_OWNER_URL
 5. Ejecutar `npm ci`, `npx prisma generate`, `npm run build` y `npm run affiliates:bootstrap`.
 6. Retirar las variables INITIAL_* al terminar. La comunidad inicial queda aprobada y su raíz es el superusuario. Las siguientes comunidades necesitan aprobación.
 
-El preparador no usa `prisma migrate deploy`: despliega el perfil de Afiliados, que no requiere extensiones vector/PostGIS del motor completo. No mezclar estos procedimientos con una base del motor completo.
+El preparador no usa `prisma migrate deploy`: despliega el perfil de Afiliados, que solo requiere la extensión estándar `pg_trgm` para acelerar búsquedas y no necesita vector/PostGIS del motor completo. No mezclar estos procedimientos con una base del motor completo.
 
 ## 3. Aplicación en Railway
 

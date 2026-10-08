@@ -121,6 +121,7 @@ model AffiliateMember {
   @@unique([tenantId, networkId, id])
   @@unique([tenantId, networkId, email])
   @@index([tenantId, networkId, parentId])
+  @@index([tenantId, networkId, status, createdAt])
 }
 
 model AffiliateSession {
@@ -132,6 +133,7 @@ model AffiliateSession {
   expires BigInt
   member AffiliateMember @relation(fields: [tenantId, networkId, memberId], references: [tenantId, networkId, id], onDelete: Cascade)
   @@index([tenantId, networkId, memberId])
+  @@index([tenantId, networkId, expires])
 }
 
 model AffiliateTermsVersion {
