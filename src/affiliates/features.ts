@@ -47,7 +47,7 @@ const clean = (m: any) => ({
   created: m.createdAt,
   childCount: Number(m.childCount || 0),
 });
-const selection = Prisma.sql`m.id,m."parentId",m.name,m.email,m.role,m.status,m.data,m."createdAt",(m.photo IS NOT NULL) AS "hasPhoto",(SELECT count(*)::int FROM "AffiliateMember" c WHERE c."networkId"=m."networkId" AND c."parentId"=m.id) AS "childCount"`;
+const selection = Prisma.sql`m.id,m."parentId",m.name,m.email,m.role,m.status,m.data,m."createdAt",m."hasPhoto",(SELECT count(*)::int FROM "AffiliateMember" c WHERE c."networkId"=m."networkId" AND c."parentId"=m.id) AS "childCount"`;
 const tree = (network: string, root: string) =>
   Prisma.sql`WITH tree AS (SELECT *,level-(SELECT level FROM "AffiliateMember" WHERE id=${root}::uuid) AS depth FROM "AffiliateMember" WHERE "networkId"=${network}::uuid AND (id=${root}::uuid OR ancestry @> ARRAY[${root}::uuid]))`;
 async function depth(tx: Prisma.TransactionClient, n: any, id: string) {
@@ -108,13 +108,19 @@ export class NetworkFeatures {
         // Include stored values from fields removed from a community's current form.
         const savedKeys = await tx.$queryRaw<{ networkId: string; key: string }[]>`
         SELECT DISTINCT "networkId", jsonb_object_keys(data) AS key FROM "AffiliateMember" WHERE "tenantId"=${n.tenantId}::uuid`;
+        const savedKeysByNetwork = new Map<string, string[]>();
+        for (const row of savedKeys) {
+          const keys = savedKeysByNetwork.get(row.networkId) ?? [];
+          keys.push(row.key);
+          savedKeysByNetwork.set(row.networkId, keys);
+        }
         const definitions = networks.map((network) => {
           const fields = [...(network.fields as any[])];
-          for (const row of savedKeys
-            .filter((row) => row.networkId === network.id)
-            .sort((a, b) => a.key.localeCompare(b.key)))
-            if (!fields.some((f) => f.id === row.key))
-              fields.push({ id: row.key, label: row.key, type: 'campo anterior' });
+          for (const key of (savedKeysByNetwork.get(network.id) ?? []).sort((a, b) =>
+            a.localeCompare(b),
+          ))
+            if (!fields.some((f) => f.id === key))
+              fields.push({ id: key, label: key, type: 'campo anterior' });
           return { ...network, fields };
         });
         const { columns, mappings } = exportColumns(definitions);
@@ -161,8 +167,11 @@ export class NetworkFeatures {
               take: 1000,
             });
             if (!members.length) break;
+            const memberIds = members.map((member) => Prisma.sql`${member.id}::uuid`);
             const photos = await tx.$queryRaw<{ id: string; present: boolean }[]>(
-              Prisma.sql`SELECT id, (photo IS NOT NULL) AS present FROM "AffiliateMember" WHERE "tenantId"=${n.tenantId}::uuid AND id::text IN (${Prisma.join(members.map((m) => m.id))})`,
+              Prisma.sql`SELECT id, (photo IS NOT NULL) AS present FROM "AffiliateMember"
+                WHERE "tenantId"=${n.tenantId}::uuid AND "networkId"=${network.id}::uuid
+                  AND id IN (${Prisma.join(memberIds)})`,
             );
             const hasPhoto = new Map(photos.map((p) => [p.id, p.present]));
             await write(
@@ -367,7 +376,13 @@ export class NetworkFeatures {
         ? Prisma.sql`WITH tree AS (SELECT * FROM "AffiliateMember" WHERE "networkId"=${n.id}::uuid AND "parentId"=${parent}::uuid)`
         : tree(n.id, viewer);
       const rows = await tx.$queryRaw<any[]>(
-        Prisma.sql`${cte}, page AS MATERIALIZED (SELECT m.id,m."parentId",m.name,m.email,m.role,m.status,m.data,m."createdAt",m.photo,m."networkId" FROM tree m WHERE m."networkId"=${n.id}::uuid ${filter} ${cursor ? Prisma.sql`AND m.id>${cursor}::uuid` : Prisma.empty} ORDER BY m.id LIMIT ${size + 1}) SELECT ${selection} FROM page m ORDER BY m.id`,
+        Prisma.sql`${cte}, page AS MATERIALIZED (
+          SELECT m.id,m."parentId",m.name,m.email,m.role,m.status,m.data,m."createdAt",m."networkId",
+            (m.photo IS NOT NULL) AS "hasPhoto"
+          FROM tree m WHERE m."networkId"=${n.id}::uuid ${filter}
+            ${cursor ? Prisma.sql`AND m.id>${cursor}::uuid` : Prisma.empty}
+          ORDER BY m.id LIMIT ${size + 1}
+        ) SELECT ${selection} FROM page m ORDER BY m.id`,
       );
       const count = await tx.$queryRaw<any[]>(
         Prisma.sql`${cte} SELECT count(*)::int AS count FROM tree m WHERE m."networkId"=${n.id}::uuid ${filter}`,
@@ -442,7 +457,9 @@ export class NetworkFeatures {
       });
       const photos = rows.length
         ? await tx.$queryRaw<any[]>(
-            Prisma.sql`SELECT id,(photo IS NOT NULL) AS present FROM "AffiliateNetwork" WHERE id::text IN (${Prisma.join(rows.map((c) => c.id))})`,
+            Prisma.sql`SELECT id,(photo IS NOT NULL) AS present FROM "AffiliateNetwork"
+              WHERE "tenantId"=${n.tenantId}::uuid
+                AND id IN (${Prisma.join(rows.map((community) => Prisma.sql`${community.id}::uuid`))})`,
           )
         : [];
       const images = new Map(photos.map((p) => [p.id, p.present]));
@@ -684,24 +701,34 @@ export class NetworkFeatures {
             : w.groupBy === '$month'
               ? Prisma.sql`to_char(m."createdAt",'YYYY-MM')`
               : Prisma.sql`coalesce(nullif(m.data->>${w.groupBy},''),'Sin datos')`;
-        const value =
+        const metricValue =
+          w.metric === 'count'
+            ? Prisma.sql`1::float8`
+            : Prisma.sql`CASE WHEN m.data->>${w.valueField} ~ '^-?[0-9]+([.][0-9]+)?$' THEN (m.data->>${w.valueField})::float8 ELSE NULL END`;
+        const aggregate =
           w.metric === 'count'
             ? Prisma.sql`count(*)::float8`
             : w.metric === 'sum'
-              ? Prisma.sql`coalesce(sum(CASE WHEN m.data->>${w.valueField} ~ '^-?[0-9]+([.][0-9]+)?$' THEN (m.data->>${w.valueField})::numeric ELSE NULL END),0)::float8`
-              : Prisma.sql`avg(CASE WHEN m.data->>${w.valueField} ~ '^-?[0-9]+([.][0-9]+)?$' THEN (m.data->>${w.valueField})::numeric ELSE NULL END)::float8`;
-        const rows = await tx.$queryRaw<any[]>(
-          Prisma.sql`${tree(n.id, me.id)} SELECT ${group} AS label,${value} AS value,count(*)::int AS count FROM tree m WHERE true ${where} GROUP BY 1 ORDER BY 1 LIMIT 51`,
+              ? Prisma.sql`coalesce(sum("metricValue"),0)::float8`
+              : Prisma.sql`avg("metricValue")::float8`;
+        // GROUPING SETS returns the grouped series and its exact total in one tree scan.
+        const results = await tx.$queryRaw<any[]>(
+          Prisma.sql`${tree(n.id, me.id)}, data AS MATERIALIZED (
+            SELECT ${group} AS label,${metricValue} AS "metricValue"
+            FROM tree m WHERE true ${where}
+          ) SELECT label,${aggregate} AS value,count(*)::int AS count,
+            (label IS NULL)::int AS "isTotal"
+            FROM data GROUP BY GROUPING SETS ((label),())
+            ORDER BY "isTotal" DESC,label LIMIT 52`,
         );
-        const total = await tx.$queryRaw<any[]>(
-          Prisma.sql`${tree(n.id, me.id)} SELECT ${value} AS value,count(*)::int AS count FROM tree m WHERE true ${where}`,
-        );
+        const total = results.find((row) => Number(row.isTotal) === 1);
+        const rows = results.filter((row) => Number(row.isTotal) === 0);
         charts.push({
           ...w,
           rows: rows.slice(0, 50),
           truncated: rows.length > 50,
-          total: total[0].value,
-          records: total[0].count,
+          total: total?.value ?? 0,
+          records: Number(total?.count ?? 0),
         });
       }
       return {
