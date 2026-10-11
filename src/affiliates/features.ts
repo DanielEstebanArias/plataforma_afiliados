@@ -372,6 +372,18 @@ export class NetworkFeatures {
       return tx.affiliateMember.findFirstOrThrow({ where: { id: target, networkId: n.id } });
     });
   }
+  async updateMemberPhoto(viewer: string, target: string, base64: string) {
+    return this.store.tx(async (tx, n) => {
+      await visible(tx, n, viewer, target);
+      const level = await depth(tx, n, target);
+      if (n.maxLoginLevel !== null && level > n.maxLoginLevel)
+        fail(403, 'Solo los aliados con acceso a la plataforma pueden cargar una foto.');
+      const image = photo(base64);
+      await tx.affiliateMember.update({ where: { id: target }, data: image });
+      await this.audit(tx, viewer, 'member.photo.updated', target, { level });
+      return { ok: true };
+    });
+  }
   async detail(viewer: string, target: string) {
     return clean(await this.visible(viewer, target));
   }

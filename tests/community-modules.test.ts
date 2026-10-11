@@ -81,6 +81,24 @@ test('superadministrator can rename every subregion and its linked app', async (
     data: { name: 'Nuevo nombre', revision: { increment: 1 } },
   });
 });
+test('member photo is restricted to levels with platform access', async () => {
+  const updates: any[] = [];
+  let query = 0;
+  const tx = {
+    $queryRaw: async () => (++query === 1 ? [{ id }] : [{ level: 3 }]),
+    affiliateMember: { update: async (value: any) => updates.push(value) },
+    auditLog: { create: async () => ({}) },
+  };
+  const features = new NetworkFeatures({
+    tx: async (fn: any) =>
+      fn(tx, { id, tenantId: 'tenant', maxLoginLevel: 2, platformRoot: false }),
+  } as any);
+  await assert.rejects(features.updateMemberPhoto(id, id, 'invalid'), {
+    status: 403,
+    message: 'Solo los aliados con acceso a la plataforma pueden cargar una foto.',
+  });
+  assert.equal(updates.length, 0);
+});
 test('module configuration requires explicit boolean values for all modules', async () => {
   const { features, me } = setup(true);
   for (const modules of [

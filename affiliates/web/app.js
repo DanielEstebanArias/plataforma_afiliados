@@ -395,7 +395,7 @@ function dynamicField(f, data) {
 }
 async function memberForm(m, parentId) {
   let loginAllowed = true;
-  if (!m && state.paged) {
+  if (state.paged && (!m || (m.role !== 'ROOT' && m.id !== state.user.id))) {
     try {
       loginAllowed = (await api('/registration?parentId=' + parentId)).loginAllowed;
     } catch (e) {
@@ -405,7 +405,7 @@ async function memberForm(m, parentId) {
   }
   modal(
     m ? 'Editar aliado' : 'Registrar aliado',
-    `<p class="muted">${m ? 'Actualiza los datos de la ficha.' : 'Se registrará debajo de ' + esc(state.members.find((x) => x.id === parentId)?.name) + '.'}</p><form id="memberForm"><div class="form-grid"><label>Nombre completo *<input name="name" required maxlength="150" value="${esc(m?.name)}"></label><label>Correo de acceso *<input name="email" type="email" required value="${esc(m?.email)}"></label>${state.org.fields.map((f) => dynamicField(f, m?.data || {})).join('')}<label class="full">${m ? 'Nueva contraseña (opcional)' : loginAllowed ? 'Contraseña inicial *' : 'Sin acceso por nivel · contraseña opcional'}<input name="password" type="password" minlength="10" maxlength="200" ${m || !loginAllowed ? '' : 'required'} autocomplete="new-password"><small class="muted">Mínimo 10 caracteres. Compártela de forma privada con el aliado.</small></label><label class="full">Foto de perfil<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"><small class="muted">La foto se ajustará antes de guardarla.</small></label>${m && m.id !== state.user.id ? `<label>Estado<select name="status"><option value="active">Activo</option><option value="inactive" ${m.status === 'inactive' ? 'selected' : ''}>Inactivo</option></select></label>` : ''}</div><p class="error" id="formError"></p><div class="actions"><button type="button" id="cancel">Cancelar</button><button class="primary">Guardar aliado</button></div></form>`,
+    `<p class="muted">${m ? 'Actualiza los datos de la ficha.' : 'Se registrará debajo de ' + esc(state.members.find((x) => x.id === parentId)?.name) + '.'}</p><form id="memberForm"><div class="form-grid"><label>Nombre completo *<input name="name" required maxlength="150" value="${esc(m?.name)}"></label><label>Correo de acceso *<input name="email" type="email" required value="${esc(m?.email)}"></label>${state.org.fields.map((f) => dynamicField(f, m?.data || {})).join('')}<label class="full">${m ? 'Nueva contraseña (opcional)' : loginAllowed ? 'Contraseña inicial *' : 'Sin acceso por nivel · contraseña opcional'}<input name="password" type="password" minlength="10" maxlength="200" ${m || !loginAllowed ? '' : 'required'} autocomplete="new-password"><small class="muted">Mínimo 10 caracteres. Compártela de forma privada con el aliado.</small></label>${loginAllowed ? '<label class="full">Foto de perfil<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"><small class="muted">La foto se ajustará antes de guardarla.</small></label>' : ''}${m && m.id !== state.user.id ? `<label>Estado<select name="status"><option value="active">Activo</option><option value="inactive" ${m.status === 'inactive' ? 'selected' : ''}>Inactivo</option></select></label>` : ''}</div><p class="error" id="formError"></p><div class="actions"><button type="button" id="cancel">Cancelar</button><button class="primary">Guardar aliado</button></div></form>`,
   );
   $('#cancel').onclick = () => $('#modal').close();
   $('#memberForm').onsubmit = async (e) => {
@@ -426,7 +426,7 @@ async function memberForm(m, parentId) {
     const button = form.querySelector('button.primary');
     button.disabled = true;
     try {
-      const photo = fd.get('photo');
+      const photo = loginAllowed ? fd.get('photo') : null;
       const encoded = photo?.size ? await compress(photo) : null;
       const r = await post(m ? '/members/' + m.id : '/members', b, m ? 'PUT' : 'POST');
       if (encoded) await post('/members/' + r.member.id + '/photo', { base64: encoded }, 'PUT');

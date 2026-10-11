@@ -343,6 +343,12 @@ function createApp(
             const parent=url.searchParams.get('parentId');await visible(parent);
             return send(await db.features.registration(parent));
           }
+          const memberPhoto=p.match(/^\/api\/members\/([^/]+)\/photo$/);
+          if(memberPhoto&&method==='PUT'){
+            const input=(await body(req)).base64;
+            if(typeof input!=='string') throw Object.assign(new Error('Selecciona una imagen.'),{status:400});
+            return send(await db.features.updateMemberPhoto(me.id,memberPhoto[1],input));
+          }
         }
         if (p === '/api/superapp' && method === 'GET') {
           if (me.role !== 'ROOT' || !db.integrated)
