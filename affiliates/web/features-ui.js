@@ -69,7 +69,7 @@ async function renderCommunities() {
       REJECTED: 'Rechazada',
       SUSPENDED: 'Suspendida',
     };
-    host.innerHTML = `<div class="hero"><div><div class="eyebrow">${result.superuser ? 'Superusuario · revisión y aprobación' : 'Tu espacio de subregiones'}</div><h1>Subregiones que crecen.</h1><p>Las nuevas subregiones necesitan aprobación antes de operar.</p></div>${result.superuser ? '<div class="profile-actions"><button id="changePlatformLogo">Cambiar logo</button><button id="exportAllCommunities">Descargar CSV de todas las subregiones</button></div>' : ''}${result.canCreate ? '<button class="primary" id="requestCommunity">＋ Crear subregión</button>' : ''}</div><div class="community-grid">${result.communities.map((c) => `<article class="community-card"><div class="community-cover">${c.hasPhoto ? `<img data-community-photo="${c.id}" alt="Foto de ${esc(c.name)}">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="community-body"><span class="badge ${c.approvalStatus === 'APPROVED' ? '' : 'inactive'}">${labels[c.approvalStatus]}</span><h2>${esc(c.name)}</h2>${result.superuser && c.root ? `<p class="muted">Usuario raíz: ${esc(c.root.name)}<br>${esc(c.root.email)}</p>` : ''}<p class="muted">${c.current ? 'Subregión actual' : c.approvalStatus === 'APPROVED' ? 'Accede con el correo y contraseña de la cuenta raíz asignada.' : 'La cuenta raíz tendrá acceso cuando se apruebe la solicitud.'}</p>${c.reviewNote ? `<p class="review-note">${esc(c.reviewNote)}</p>` : ''}<div class="profile-actions">${result.superuser ? `<button class="primary" data-community-tree="${c.id}">Administrar subregión</button>` : c.current ? '<button data-current="true">Ver mi árbol</button>' : c.approvalStatus === 'APPROVED' ? `<a class="button-link" href="${esc(c.url)}">Abrir subregión →</a>` : ''}${result.superuser ? `<button data-review="${c.id}" data-status="APPROVED">Aprobar / habilitar</button><button class="ghost" data-review="${c.id}" data-status="${c.approvalStatus === 'APPROVED' ? 'SUSPENDED' : 'REJECTED'}">${c.approvalStatus === 'APPROVED' ? 'Suspender' : 'Rechazar'}</button><button class="ghost" data-modules="${c.id}">Configurar submódulos</button>` : ''}${result.superuser ? `<button class="ghost" data-change-root="${c.id}">Cambiar usuario raíz</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-delete-community="${c.id}">Eliminar subregión</button>` : ''}${c.canEditPhoto ? `<button class="ghost" data-community-edit="${c.id}">Cambiar foto</button>` : ''}</div></div></article>`).join('')}</div>`;
+    host.innerHTML = `<div class="hero"><div><div class="eyebrow">${result.superuser ? 'Superusuario · revisión y aprobación' : 'Tu espacio de subregiones'}</div><h1>Subregiones que crecen.</h1><p>Las nuevas subregiones necesitan aprobación antes de operar.</p></div>${result.superuser ? '<div class="profile-actions"><button id="changePlatformLogo">Cambiar logo</button><button id="exportAllCommunities">Descargar CSV de todas las subregiones</button></div>' : ''}${result.canCreate ? '<button class="primary" id="requestCommunity">＋ Crear subregión</button>' : ''}</div><div class="community-grid">${result.communities.map((c) => `<article class="community-card"><div class="community-cover">${c.hasPhoto ? `<img data-community-photo="${c.id}" alt="Foto de ${esc(c.name)}">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="community-body"><span class="badge ${c.approvalStatus === 'APPROVED' ? '' : 'inactive'}">${labels[c.approvalStatus]}</span><h2>${esc(c.name)}</h2>${result.superuser && c.root ? `<p class="muted">Usuario raíz: ${esc(c.root.name)}<br>${esc(c.root.email)}</p>` : ''}<p class="muted">${c.current ? 'Subregión actual' : c.approvalStatus === 'APPROVED' ? 'Accede con el correo y contraseña de la cuenta raíz asignada.' : 'La cuenta raíz tendrá acceso cuando se apruebe la solicitud.'}</p>${c.reviewNote ? `<p class="review-note">${esc(c.reviewNote)}</p>` : ''}<div class="profile-actions">${result.superuser ? `<button class="primary" data-community-tree="${c.id}">Administrar subregión</button>` : c.current ? '<button data-current="true">Ver mi árbol</button>' : c.approvalStatus === 'APPROVED' ? `<a class="button-link" href="${esc(c.url)}">Abrir subregión →</a>` : ''}${result.superuser ? `<button class="ghost" data-change-name="${c.id}">Cambiar nombre</button><button data-review="${c.id}" data-status="APPROVED">Aprobar / habilitar</button><button class="ghost" data-review="${c.id}" data-status="${c.approvalStatus === 'APPROVED' ? 'SUSPENDED' : 'REJECTED'}">${c.approvalStatus === 'APPROVED' ? 'Suspender' : 'Rechazar'}</button><button class="ghost" data-modules="${c.id}">Configurar submódulos</button>` : ''}${result.superuser ? `<button class="ghost" data-change-root="${c.id}">Cambiar usuario raíz</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-delete-community="${c.id}">Eliminar subregión</button>` : ''}${c.canEditPhoto ? `<button class="ghost" data-community-edit="${c.id}">Cambiar foto</button>` : ''}</div></div></article>`).join('')}</div>`;
     if ($('#exportAllCommunities')) $('#exportAllCommunities').onclick = exportAllCommunities;
     if ($('#changePlatformLogo')) $('#changePlatformLogo').onclick = editPlatformLogo;
     host.querySelectorAll('[data-delete-community]').forEach((button) => {
@@ -107,6 +107,34 @@ async function renderCommunities() {
     if ($('#requestCommunity')) $('#requestCommunity').onclick = () => showCreateCommunity(result);
     host.querySelectorAll('[data-community-tree]').forEach((button) => {
       button.onclick = () => openCommunityTree(button.dataset.communityTree);
+    });
+    host.querySelectorAll('[data-change-name]').forEach((button) => {
+      button.onclick = () => {
+        const community = result.communities.find((c) => c.id === button.dataset.changeName);
+        modal(
+          'Cambiar nombre de la subregión',
+          `<form id="changeCommunityNameForm"><label>Nombre de la subregión<input name="name" value="${esc(community.name)}" required maxlength="150" autocomplete="off"></label><p class="error" id="changeCommunityNameError"></p><button class="primary">Guardar nombre</button></form>`,
+        );
+        $('#changeCommunityNameForm').onsubmit = async (event) => {
+          event.preventDefault();
+          const submit = event.target.querySelector('button');
+          submit.disabled = true;
+          try {
+            await post(
+              '/communities/' + community.id + '/name',
+              { name: new FormData(event.target).get('name') },
+              'PUT',
+            );
+            $('#modal').close();
+            await renderCommunities();
+            toast('Nombre de la subregión actualizado.');
+          } catch (error) {
+            $('#changeCommunityNameError').textContent = error.message;
+          } finally {
+            submit.disabled = false;
+          }
+        };
+      };
     });
     host.querySelectorAll('[data-current]').forEach(
       (b) =>

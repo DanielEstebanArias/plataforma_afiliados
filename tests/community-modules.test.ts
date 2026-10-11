@@ -12,7 +12,18 @@ function setup(platformRoot = false, role = 'ROOT', targetPlatformRoot = false) 
   };
   const tx = {
     affiliateNetwork: {
-      findFirst: async () => ({ id: 'target', platformRoot: targetPlatformRoot }),
+      findFirst: async () => ({
+        id: 'target',
+        tenantId: 'tenant',
+        appId: 'app',
+        name: 'Nombre anterior',
+        platformRoot: targetPlatformRoot,
+      }),
+      update: async (value: any) => {
+        updates.push(value);
+      },
+    },
+    app: {
       update: async (value: any) => {
         updates.push(value);
       },
@@ -59,6 +70,16 @@ test('platform root can update its own approval status', async () => {
   const { features, me, updates } = setup(true, 'ROOT', true);
   await features.review(me, id, { status: 'APPROVED', note: '' });
   assert.equal(updates[0].data.approvalStatus, 'APPROVED');
+});
+test('superadministrator can rename every subregion and its linked app', async () => {
+  const { features, me, updates } = setup(true, 'ROOT', true);
+  const result = await features.renameCommunity(me, id, { name: '  Nuevo nombre  ' });
+  assert.equal(result.name, 'Nuevo nombre');
+  assert.deepEqual(updates[0], { where: { id: 'target' }, data: { name: 'Nuevo nombre' } });
+  assert.deepEqual(updates[1], {
+    where: { tenantId_id: { tenantId: 'tenant', id: 'app' } },
+    data: { name: 'Nuevo nombre', revision: { increment: 1 } },
+  });
 });
 test('module configuration requires explicit boolean values for all modules', async () => {
   const { features, me } = setup(true);

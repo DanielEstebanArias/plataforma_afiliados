@@ -338,6 +338,29 @@ export class NetworkFeatures {
       throw error;
     }
   }
+  async renameCommunity(me: any, id: string, b: any) {
+    return this.store.tx(async (tx, n) => {
+      if (!n.platformRoot || me.role !== 'ROOT')
+        fail(403, 'Solo el superadministrador cambia el nombre de las subregiones.');
+      const target = await tx.affiliateNetwork.findFirst({
+        where: { id: uuid(id), tenantId: n.tenantId },
+      });
+      if (!target) fail(404, 'Subregión no disponible.');
+      if (typeof b?.name !== 'string' || !b.name.trim() || b.name.trim().length > 150)
+        fail(400, 'Escribe un nombre válido de máximo 150 caracteres.');
+      const name = b.name.trim();
+      await tx.affiliateNetwork.update({ where: { id: target.id }, data: { name } });
+      await tx.app.update({
+        where: { tenantId_id: { tenantId: n.tenantId, id: target.appId } },
+        data: { name, revision: { increment: 1 } },
+      });
+      await this.audit(tx, me.id, 'community.name.updated', target.id, {
+        previousName: target.name,
+        name,
+      });
+      return { id: target.id, name };
+    });
+  }
   async registration(parent: string) {
     return this.store.tx(async (tx, n) => ({
       loginAllowed: n.maxLoginLevel === null || (await depth(tx, n, parent)) + 1 <= n.maxLoginLevel,

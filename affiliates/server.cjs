@@ -324,6 +324,8 @@ function createApp(
           if(moduleRoute&&method==='PUT')return send(await db.features.updateModules(me,moduleRoute[1],await body(req)));
           const rootRoute=p.match(/^\/api\/communities\/([^/]+)\/root$/);
           if(rootRoute&&method==='PUT')return send(await db.features.changeRoot(me,rootRoute[1],await body(req)));
+          const nameRoute=p.match(/^\/api\/communities\/([^/]+)\/name$/);
+          if(nameRoute&&method==='PUT')return send(await db.features.renameCommunity(me,nameRoute[1],await body(req)));
           const community=p.match(/^\/api\/communities\/([^/]+)(\/photo)?$/);
           if(community){
             if(community[2]&&['GET','PUT'].includes(method)){
