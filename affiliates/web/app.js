@@ -157,6 +157,7 @@ async function load() {
     previousView = state.view;
   state.selectedCommunity = null;
   state.treeRoot = null;
+  state.wholeTreeLoaded = false;
   const me = await api('/me');
   csrf = me.csrf;
   state.user = me.user;
@@ -313,6 +314,7 @@ function network() {
       (id) => memberForm(null, id),
       photos,
       state.paged ? loadBranch : null,
+      state.paged ? loadWholeTree : null,
     );
     if (state.paged) {
       $('#network').insertAdjacentHTML(
