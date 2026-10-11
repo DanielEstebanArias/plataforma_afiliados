@@ -56,6 +56,39 @@ async function loadBranch(id) {
     network();
   }
 }
+async function loadWholeTree() {
+  if (state.wholeTreeLoaded) {
+    window.AffiliateTree.unfoldAll();
+    network();
+    return;
+  }
+  try {
+    const members = [];
+    let cursor = null;
+    do {
+      const page = await api('/members?limit=100' + (cursor ? '&after=' + cursor : ''));
+      members.push(...page.members);
+      cursor = page.nextCursor;
+    } while (cursor);
+    const root = state.treeRoot || state.user;
+    const unique = new Map(members.map((member) => [member.id, member]));
+    unique.set(root.id, {
+      ...root,
+      parentId: null,
+      childCount: state.stats?.direct ?? root.childCount,
+    });
+    state.members = [...unique.values()];
+    state.focus = root.id;
+    state.wholeTreeLoaded = true;
+    state.branchPages = {};
+    window.AffiliateTree.unfoldAll();
+    network();
+    toast(`Árbol completo cargado: ${state.members.length.toLocaleString('es-CO')} aliados.`);
+  } catch (error) {
+    toast(error.message);
+    network();
+  }
+}
 async function focusBranch(id) {
   try {
     const [detail, page] = await Promise.all([
@@ -65,6 +98,7 @@ async function focusBranch(id) {
     state.focus = id;
     state.members = [{ ...detail.member, childCount: page.total, hasMore: !!page.nextCursor }, ...page.members];
     state.branchPages = { [id]: page.nextCursor };
+    state.wholeTreeLoaded = false;
     state.view = 'tree';
     state.query = '';
     render();

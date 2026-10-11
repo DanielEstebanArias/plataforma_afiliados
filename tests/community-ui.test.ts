@@ -193,3 +193,15 @@ test('tree pans without overflow using mouse or touch and stops after release', 
   fit.onclick();
   assert.equal(world.style.transform, 'translate(0px, 0px) scale(1)');
 });
+
+test('expand loads every paginated branch before unfolding the complete tree', () => {
+  const tree = fs.readFileSync('affiliates/web/tree.js', 'utf8');
+  const paging = fs.readFileSync('affiliates/web/paging.js', 'utf8');
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  assert.match(tree, /await onExpandAll\(\)/);
+  assert.match(tree, /budget > 5000/);
+  assert.match(tree, /unfoldAll/);
+  assert.match(paging, /do \{[\s\S]*\/members\?limit=100[\s\S]*\} while \(cursor\)/);
+  assert.match(paging, /state\.wholeTreeLoaded = true/);
+  assert.match(app, /state\.paged \? loadWholeTree : null/);
+});

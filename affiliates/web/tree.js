@@ -12,7 +12,7 @@ window.AffiliateTree = (() => {
       /[&<>"']/g,
       (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
     );
-  function render(host, members, user, avatar, onOpen, onAdd, loadPhotos, onLoad) {
+  function render(host, members, user, avatar, onOpen, onAdd, loadPhotos, onLoad, onExpandAll) {
     const byId = new Map(members.map((m) => [m.id, m])),
       children = new Map();
     for (const m of members) {
@@ -43,7 +43,7 @@ window.AffiliateTree = (() => {
       let budget = 0;
       function measure(m, depth) {
         budget++;
-        if (depth > 40 || budget > 500 || folded.has(m.id)) {
+        if (depth > 40 || budget > 5000 || folded.has(m.id)) {
           widths.set(m.id, cardWidth);
           return cardWidth;
         }
@@ -107,7 +107,7 @@ window.AffiliateTree = (() => {
         host.querySelector('[data-action="wide"]').textContent = 'Cerrar vista amplia';
       host.querySelectorAll('[data-action]').forEach(
         (b) =>
-          (b.onclick = () => {
+          (b.onclick = async () => {
             const a = b.dataset.action;
             if (a === 'wide') {
               const panel = host.closest('.board');
@@ -125,6 +125,12 @@ window.AffiliateTree = (() => {
               viewport.scrollTop = 0;
             }
             if (a === 'expand') {
+              if (onExpandAll) {
+                b.disabled = true;
+                b.textContent = 'Cargando árbol…';
+                await onExpandAll();
+                return;
+              }
               folded.clear();
               draw();
             }
@@ -182,5 +188,5 @@ window.AffiliateTree = (() => {
     }
     draw();
   }
-  return { render };
+  return { render, unfoldAll: () => folded.clear() };
 })();
