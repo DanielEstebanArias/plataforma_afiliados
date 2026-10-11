@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { PrismaClient } from '@prisma/client';
 import { TenantContextManager } from '../security/tenant-context.manager';
 import { affiliatesHandler, mountAffiliates } from './middleware';
+import { startBirthdayScheduler } from './birthdays';
 @Module({ providers: [TenantContextManager] })
 class ProductionAffiliatesModule {}
 export async function startProduction() {
@@ -33,6 +34,7 @@ export async function startProduction() {
     await tx.affiliateNetwork.findUniqueOrThrow({where:{appId:process.env.AFFILIATES_APP_ID!}});
   });
   mountAffiliates(app, prisma);
+  startBirthdayScheduler(prisma, process.env.AFFILIATES_TENANT_ID);
   app.use(handler);
   app.enableShutdownHooks();
   await app.listen(Number(process.env.PORT || 8080), '0.0.0.0');

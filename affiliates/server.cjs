@@ -64,6 +64,8 @@ function createApp(
       fail(400, 'Escribe un correo válido.');
     const data = b.data || {};
     if (typeof data !== 'object' || Array.isArray(data)) fail(400, 'Datos inválidos.');
+    if (data.birthDate !== undefined && data.birthDate !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(data.birthDate))
+      fail(400, 'Fecha de nacimiento inválida.');
     for (const f of JSON.parse((await org()).fields)) {
       const v = data[f.id];
       if (
@@ -292,6 +294,15 @@ function createApp(
             const input=(await body(req)).base64;
             if(typeof input!=='string') throw Object.assign(new Error('Selecciona una imagen.'),{status:400});
             return send(await db.features.platformLogo(me,input));
+          }
+          if(p==='/api/birthday/config'&&['GET','PUT'].includes(method))
+            return send(await db.features.birthdayConfig(me,method==='PUT'?await body(req):undefined));
+          if(p==='/api/birthday/card'&&['GET','PUT'].includes(method)){
+            const input=method==='PUT'?(await body(req)).base64:undefined;
+            if(method==='PUT'&&typeof input!=='string') throw Object.assign(new Error('Selecciona una imagen.'),{status:400});
+            const result=await db.features.birthdayCard(me,input);
+            if(method==='GET'){res.writeHead(200,{'Content-Type':result.mime,'Cache-Control':'private, no-store'});return res.end(Buffer.from(result.bytes));}
+            return send(result);
           }
           if(p==='/api/communities/export.csv'&&method==='GET') {
             await db.features.exportCommunities(me, async (chunk) => {

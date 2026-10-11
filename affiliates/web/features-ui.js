@@ -27,6 +27,63 @@ async function exportAllCommunities() {
     button.textContent = 'Descargar CSV de todas las subregiones';
   }
 }
+async function renderBirthdays() {
+  const host = $('#featurePage');
+  host.innerHTML = '<p>Cargando configuración de cumpleaños…</p>';
+  try {
+    const config = await api('/birthday/config');
+    host.innerHTML = `<div class="hero"><div><div class="eyebrow">Administración central</div><h1>Tarjetas de cumpleaños.</h1><p>Personaliza una tarjeta y envíala automáticamente al correo registrado de cada aliado en su cumpleaños.</p></div></div><article class="core-card birthday-layout"><div><h2>Plantilla institucional</h2><p class="muted">Carga una imagen JPG o PNG. Luego haz clic sobre la vista previa para ubicar el nombre.</p><form id="birthdayCardForm"><label>Imagen de la tarjeta<input name="card" type="file" accept="image/png,image/jpeg" required></label><button>Guardar imagen</button><p class="error" id="birthdayCardError"></p></form><div class="birthday-preview ${config.hasCard ? '' : 'empty'}" id="birthdayPreview">${config.hasCard ? '<img id="birthdayImage" alt="Plantilla de cumpleaños"><span id="birthdayName">Nombre del aliado</span>' : '<p>Carga una imagen para comenzar.</p>'}</div></div><form id="birthdayConfigForm"><h2>Ubicación predeterminada</h2><label>Posición horizontal (%)<input name="nameX" type="number" min="0" max="100" step="0.1" value="${config.nameX}"></label><label>Posición vertical (%)<input name="nameY" type="number" min="0" max="100" step="0.1" value="${config.nameY}"></label><label>Tamaño del nombre<input name="fontSize" type="number" min="16" max="120" value="${config.fontSize}"></label><label>Color del nombre<input name="textColor" type="color" value="${esc(config.textColor)}"></label><label class="check"><input name="enabled" type="checkbox" ${config.enabled ? 'checked' : ''} ${!config.mailReady || !config.hasCard ? 'disabled' : ''}>Activar envíos automáticos</label><p class="form-note">El sistema revisa diariamente la fecha de nacimiento definida en la ficha de cada aliado y evita envíos duplicados durante el mismo año.</p>${config.mailReady ? '' : '<p class="review-note">El servicio de correo aún no tiene configurados RESEND_API_KEY y BIRTHDAY_FROM_EMAIL. La tarjeta puede diseñarse, pero los envíos permanecerán desactivados.</p>'}<p class="error" id="birthdayConfigError"></p><button class="primary">Guardar configuración</button></form></article>`;
+    let cardUrl;
+    const updatePreview = () => {
+      const name = $('#birthdayName');
+      if (!name) return;
+      const form = $('#birthdayConfigForm');
+      name.style.left = form.elements.nameX.value + '%';
+      name.style.top = form.elements.nameY.value + '%';
+      name.style.fontSize = Math.max(12, Number(form.elements.fontSize.value) * 0.45) + 'px';
+      name.style.color = form.elements.textColor.value;
+    };
+    if (config.hasCard) {
+      const response = await fetch(apiBase + '/api/birthday/card', { headers: nativeToken ? { Authorization: 'Bearer ' + nativeToken } : {} });
+      if (!response.ok) throw new Error('No se pudo cargar la tarjeta.');
+      cardUrl = URL.createObjectURL(await response.blob());
+      $('#birthdayImage').src = cardUrl;
+      $('#birthdayImage').onload = updatePreview;
+      $('#birthdayPreview').onclick = (event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const form = $('#birthdayConfigForm');
+        form.elements.nameX.value = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)).toFixed(1);
+        form.elements.nameY.value = Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)).toFixed(1);
+        updatePreview();
+      };
+    }
+    $('#birthdayConfigForm').querySelectorAll('input[type="number"],input[type="color"]').forEach((input) => input.oninput = updatePreview);
+    updatePreview();
+    $('#birthdayCardForm').onsubmit = async (event) => {
+      event.preventDefault();
+      const file = new FormData(event.target).get('card');
+      const button = event.target.querySelector('button');
+      button.disabled = true;
+      try {
+        if (!file?.size || file.size > 2000000 || !['image/png', 'image/jpeg'].includes(file.type)) throw new Error('Usa una imagen JPG o PNG de máximo 2 MB.');
+        const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(file); });
+        await post('/birthday/card', { base64 }, 'PUT');
+        toast('Tarjeta guardada. Ahora ubica el nombre.');
+        renderBirthdays();
+      } catch (error) { $('#birthdayCardError').textContent = error.message; button.disabled = false; }
+    };
+    $('#birthdayConfigForm').onsubmit = async (event) => {
+      event.preventDefault();
+      const form = event.target, button = form.querySelector('button.primary');
+      button.disabled = true;
+      try {
+        await post('/birthday/config', { nameX: Number(form.elements.nameX.value), nameY: Number(form.elements.nameY.value), fontSize: Number(form.elements.fontSize.value), textColor: form.elements.textColor.value, enabled: form.elements.enabled.checked }, 'PUT');
+        toast('Configuración de cumpleaños guardada.');
+      } catch (error) { $('#birthdayConfigError').textContent = error.message; }
+      finally { button.disabled = false; }
+    };
+  } catch (error) { host.textContent = error.message; }
+}
 function moduleInputs(modules = { access: true, dashboard: true, form: true }) {
   return (
     '<fieldset><legend>Submódulos habilitados</legend>' +
@@ -462,7 +519,7 @@ function configureDashboard() {
 function showCreateCommunity(result) {
   modal(
     'Solicitar una subregión',
-    `<form id="communityRequest"><p class="form-note">Asigna una cuenta raíz independiente. La subregión quedará pendiente de aprobación.</p><label>Nombre de la subregión<input name="name" required maxlength="150"></label><fieldset><legend>Usuario raíz</legend><label>Nombre<input name="rootName" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="rootEmail" type="email" required maxlength="254" autocomplete="off"></label><label>Contraseña<input name="rootPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label></fieldset>${result.superuser ? moduleInputs() : '<p>El superadministrador habilitará los submódulos.</p>'}<label>Foto de la subregión<input name="photo" type="file" accept="image/*"></label><p class="error" id="communityError"></p><div class="actions"><button class="primary">Enviar solicitud</button></div></form>`,
+    `<form id="communityRequest"><p class="form-note">Asigna una cuenta raíz independiente. La subregión quedará pendiente de aprobación.</p><label>Nombre de la subregión<input name="name" required maxlength="150"></label><fieldset><legend>Usuario raíz</legend><label>Nombre<input name="rootName" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="rootEmail" type="email" required maxlength="254" autocomplete="off"></label><label>Fecha de nacimiento<input name="rootBirthDate" type="date"></label><label>Contraseña<input name="rootPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label></fieldset>${result.superuser ? moduleInputs() : '<p>El superadministrador habilitará los submódulos.</p>'}<label>Foto de la subregión<input name="photo" type="file" accept="image/*"></label><p class="error" id="communityError"></p><div class="actions"><button class="primary">Enviar solicitud</button></div></form>`,
   );
   $('#communityRequest').onsubmit = async (e) => {
     e.preventDefault();
@@ -476,6 +533,7 @@ function showCreateCommunity(result) {
         root: {
           name: f.get('rootName'),
           email: f.get('rootEmail'),
+          birthDate: f.get('rootBirthDate'),
           password: f.get('rootPassword'),
         },
         modules: selectedModules(f),

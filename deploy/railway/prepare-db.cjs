@@ -30,6 +30,8 @@ function main(){
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610030001_platform_branding/migration.sql','utf8')+'\nCOMMIT;');
  if(!sql(`SELECT to_regclass('public."AffiliateMember_tenantId_networkId_status_createdAt_idx"');`))
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610080001_performance_indexes/migration.sql','utf8')+'\nCOMMIT;');
+ if(!sql(`SELECT to_regclass('public."AffiliateBirthdayDelivery"');`))
+  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610110001_birthday_cards/migration.sql','utf8')+'\nCOMMIT;');
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;

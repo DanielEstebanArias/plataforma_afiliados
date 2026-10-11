@@ -11,6 +11,7 @@ import { z, ZodError } from 'zod';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { AffiliatesController } from './affiliates/controller';
 import { mountAffiliates } from './affiliates/middleware';
+import { startBirthdayScheduler } from './affiliates/birthdays';
 import { TenantContextManager } from './security/tenant-context.manager';
 import { AuthService, AuthGuard, TenantInterceptor } from './security/auth';
 import { SecretsService } from './security/secrets.service';
@@ -93,6 +94,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: true });
   const affiliatesDb = new PrismaClient();
   mountAffiliates(app, affiliatesDb);
+  startBirthdayScheduler(affiliatesDb, process.env.AFFILIATES_TENANT_ID);
   app.useBodyParser('json', { limit: '2mb' });
   app.use(
     helmet({

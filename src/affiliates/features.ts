@@ -74,6 +74,10 @@ function photo(base64: any) {
 }
 export class NetworkFeatures {
   constructor(private store: AffiliatesStore) {}
+  private requireSuperadministrator(me: any, n: any) {
+    if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
+      fail(403, 'Solo el superadministrador configura las tarjetas de cumpleaños.');
+  }
   async platformLogo(me?: any, base64?: string) {
     return this.store.tx(async (tx, n) => {
       if (base64 !== undefined) {
@@ -93,6 +97,54 @@ export class NetworkFeatures {
       });
       if (!tenant?.platformLogo) fail(404, 'La plataforma no tiene un logo personalizado.');
       return { bytes: tenant.platformLogo, mime: tenant.platformLogoMime || 'image/png' };
+    });
+  }
+  async birthdayConfig(me: any, input?: any) {
+    return this.store.tx(async (tx, n) => {
+      this.requireSuperadministrator(me, n);
+      if (input !== undefined) {
+        const x = Number(input.nameX), y = Number(input.nameY), size = Number(input.fontSize);
+        if (!Number.isFinite(x) || x < 0 || x > 100 || !Number.isFinite(y) || y < 0 || y > 100)
+          fail(400, 'Ubica el nombre dentro de la tarjeta.');
+        if (!Number.isInteger(size) || size < 16 || size > 120)
+          fail(400, 'El tamaño del nombre debe estar entre 16 y 120.');
+        if (typeof input.textColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.textColor))
+          fail(400, 'Selecciona un color válido para el nombre.');
+        const current = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: { birthdayCard: true } });
+        if (input.enabled === true && !current.birthdayCard)
+          fail(400, 'Carga una tarjeta antes de activar los envíos.');
+        if (input.enabled === true && (!process.env.RESEND_API_KEY || !process.env.BIRTHDAY_FROM_EMAIL))
+          fail(400, 'Configura el servicio y el remitente de correo antes de activar los envíos.');
+        await tx.tenant.update({ where: { id: n.tenantId }, data: {
+          birthdayNameX: x, birthdayNameY: y, birthdayFontSize: size,
+          birthdayTextColor: input.textColor.toUpperCase(), birthdayEnabled: input.enabled === true,
+        }});
+        await this.audit(tx, me.id, 'birthday.config.updated', n.tenantId, { nameX: x, nameY: y, fontSize: size, enabled: input.enabled === true });
+      }
+      const config = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: {
+        birthdayCard: true, birthdayNameX: true, birthdayNameY: true,
+        birthdayFontSize: true, birthdayTextColor: true, birthdayEnabled: true,
+      }});
+      return {
+        hasCard: !!config.birthdayCard, nameX: config.birthdayNameX, nameY: config.birthdayNameY,
+        fontSize: config.birthdayFontSize, textColor: config.birthdayTextColor,
+        enabled: config.birthdayEnabled,
+        mailReady: !!process.env.RESEND_API_KEY && !!process.env.BIRTHDAY_FROM_EMAIL,
+      };
+    });
+  }
+  async birthdayCard(me: any, base64?: string) {
+    return this.store.tx(async (tx, n) => {
+      this.requireSuperadministrator(me, n);
+      if (base64 !== undefined) {
+        const image = photo(base64);
+        await tx.tenant.update({ where: { id: n.tenantId }, data: { birthdayCard: image.photo, birthdayCardMime: image.photoMime, birthdayEnabled: false } });
+        await this.audit(tx, me.id, 'birthday.card.updated', n.tenantId, {});
+        return { ok: true };
+      }
+      const config = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: { birthdayCard: true, birthdayCardMime: true } });
+      if (!config.birthdayCard) fail(404, 'Aún no se ha cargado la tarjeta de cumpleaños.');
+      return { bytes: config.birthdayCard, mime: config.birthdayCardMime || 'image/jpeg' };
     });
   }
   async exportCommunities(me: any, write: (chunk: string) => Promise<void>) {
@@ -535,6 +587,8 @@ export class NetworkFeatures {
       rootInput.password.length > 200
     )
       fail(400, 'La contraseña debe tener entre 10 y 200 caracteres.');
+    if (rootInput.birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(rootInput.birthDate))
+      fail(400, 'Indica una fecha de nacimiento válida.');
     const modules = parseModules(b.modules);
     const salt = randomBytes(16).toString('hex');
     const password =
@@ -587,7 +641,7 @@ export class NetworkFeatures {
           email: rootInput.email.trim().toLowerCase(),
           password,
           role: 'ROOT',
-          data: {},
+          data: rootInput.birthDate ? { birthDate: rootInput.birthDate } : {},
         },
       });
       await mirrorMember(tx, network, root);
