@@ -113,8 +113,6 @@ export class NetworkFeatures {
         const current = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: { birthdayCard: true } });
         if (input.enabled === true && !current.birthdayCard)
           fail(400, 'Carga una tarjeta antes de activar los envíos.');
-        if (input.enabled === true && (!process.env.RESEND_API_KEY || !process.env.BIRTHDAY_FROM_EMAIL))
-          fail(400, 'Configura el servicio y el remitente de correo antes de activar los envíos.');
         await tx.tenant.update({ where: { id: n.tenantId }, data: {
           birthdayNameX: x, birthdayNameY: y, birthdayFontSize: size,
           birthdayTextColor: input.textColor.toUpperCase(), birthdayEnabled: input.enabled === true,

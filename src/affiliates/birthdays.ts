@@ -48,6 +48,8 @@ export async function runBirthdayDelivery(prisma: PrismaClient, tenantId: string
     const config = await tx.tenant.findUnique({ where: { id: tenantId } });
     if (!config?.birthdayEnabled || !config.birthdayCard)
       return { configured: !!config?.birthdayCard, sent: 0, failed: 0, pending: 0 };
+    if (!process.env.RESEND_API_KEY || !process.env.BIRTHDAY_FROM_EMAIL)
+      return { configured: true, mailReady: false, sent: 0, failed: 0, pending: 0 };
     const members = await tx.$queryRaw<any[]>`
       SELECT m.id,m.name,m.email FROM "AffiliateMember" m
       JOIN "AffiliateNetwork" n ON n.id=m."networkId" AND n."tenantId"=m."tenantId"
