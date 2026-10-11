@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NetworkFeatures } from '../src/affiliates/features';
 
-function setup(platformRoot = false, role = 'ROOT') {
+function setup(platformRoot = false, role = 'ROOT', targetPlatformRoot = false) {
   const updates: any[] = [];
   const network = {
     id: 'network',
@@ -12,11 +12,12 @@ function setup(platformRoot = false, role = 'ROOT') {
   };
   const tx = {
     affiliateNetwork: {
-      findFirst: async () => ({ id: 'target', platformRoot: false }),
+      findFirst: async () => ({ id: 'target', platformRoot: targetPlatformRoot }),
       update: async (value: any) => {
         updates.push(value);
       },
     },
+    affiliateSession: { deleteMany: async () => ({ count: 0 }) },
     auditLog: { create: async () => ({}) },
   };
   const features = new NetworkFeatures({
@@ -47,6 +48,17 @@ test('only platform root can configure modules', async () => {
   await features.updateModules(me, id, { modules });
   assert.deepEqual(updates[0].data.modules, { ...modules, createCommunities: false });
   await features.requireModule('dashboard');
+});
+test('platform root can configure its own submodules', async () => {
+  const modules = { access: true, dashboard: true, form: false };
+  const { features, me, updates } = setup(true, 'ROOT', true);
+  await features.updateModules(me, id, { modules });
+  assert.deepEqual(updates[0].data.modules, { ...modules, createCommunities: false });
+});
+test('platform root can update its own approval status', async () => {
+  const { features, me, updates } = setup(true, 'ROOT', true);
+  await features.review(me, id, { status: 'APPROVED', note: '' });
+  assert.equal(updates[0].data.approvalStatus, 'APPROVED');
 });
 test('module configuration requires explicit boolean values for all modules', async () => {
   const { features, me } = setup(true);

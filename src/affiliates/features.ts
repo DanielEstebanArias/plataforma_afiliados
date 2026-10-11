@@ -255,8 +255,7 @@ export class NetworkFeatures {
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target || target.platformRoot)
-        fail(403, 'Subregión no disponible para configurar submódulos.');
+      if (!target) fail(404, 'Subregión no disponible para configurar submódulos.');
       const modules = parseModules(b.modules);
       await tx.affiliateNetwork.update({ where: { id }, data: { modules } });
       await this.audit(tx, me.id, 'community.modules.updated', id, { modules });
@@ -599,8 +598,7 @@ export class NetworkFeatures {
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target || target.platformRoot)
-        fail(403, 'Esta subregión no puede modificarse desde solicitudes.');
+      if (!target) fail(404, 'Subregión no disponible.');
       const note = String(b.note || '')
         .trim()
         .slice(0, 500);
