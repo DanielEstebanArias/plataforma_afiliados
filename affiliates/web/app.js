@@ -392,7 +392,32 @@ function dynamicField(f, data) {
   const attrs = `name="field_${esc(f.id)}" ${required}`;
   if (f.type === 'checkbox')
     return `<label class="check"><input type="checkbox" ${attrs} ${value ? 'checked' : ''}>${esc(f.label)}${f.required ? ' *' : ''}</label>`;
-  return `<label>${esc(f.label)}${f.required ? ' *' : ''}${f.type === 'select' ? `<select ${attrs}><option value="">Seleccionar…</option>${f.options.map((o) => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` : f.type === 'textarea' ? `<textarea ${attrs} maxlength="4000">${esc(value)}</textarea>` : `<input type="${f.type}" ${attrs} value="${esc(value)}" maxlength="4000" ${f.type === 'number' ? 'step="any"' : ''}>`}</label>`;
+  if (f.id === 'municipality')
+    return `<label class="municipality-picker">${esc(f.label)}${f.required ? ' *' : ''}<input type="text" ${attrs} value="${esc(value)}" maxlength="100" autocomplete="off" data-municipality aria-autocomplete="list" aria-expanded="false"><span class="municipality-options" role="listbox"></span></label>`;
+  return `<label>${esc(f.label)}${f.required ? ' *' : ''}${f.type === 'select' ? `<select ${attrs}><option value="">Seleccionar…</option>${f.options.map((o) => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` : f.type === 'textarea' ? `<textarea ${attrs} maxlength="4000">${esc(value)}</textarea>` : `<input type="${f.type}" ${attrs} value="${esc(value)}" maxlength="4000" ${f.type === 'number' ? 'step="1" min="0" inputmode="numeric"' : ''}>`}</label>`;
+}
+const normalizeMunicipality = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+function bindMunicipalityAutocomplete() {
+  const input = document.querySelector('[data-municipality]');
+  if (!input || typeof ANTIOQUIA_MUNICIPALITIES === 'undefined') return;
+  const box = input.nextElementSibling;
+  const draw = () => {
+    const query = normalizeMunicipality(input.value);
+    const matches = ANTIOQUIA_MUNICIPALITIES.filter((name) => normalizeMunicipality(name).includes(query)).slice(0, 10);
+    box.innerHTML = matches.map((name) => `<button type="button" role="option" data-municipality-option="${esc(name)}">${esc(name)}</button>`).join('');
+    box.hidden = !query || !matches.length;
+    input.setAttribute('aria-expanded', String(!box.hidden));
+    box.querySelectorAll('[data-municipality-option]').forEach((button) => button.onclick = () => {
+      input.value = button.dataset.municipalityOption;
+      input.setCustomValidity('');
+      box.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      input.focus();
+    });
+  };
+  input.oninput = draw;
+  input.onfocus = draw;
+  input.onblur = () => setTimeout(() => { box.hidden = true; input.setAttribute('aria-expanded', 'false'); }, 150);
 }
 async function memberForm(m, parentId) {
   let loginAllowed = true;
@@ -404,21 +429,35 @@ async function memberForm(m, parentId) {
       return;
     }
   }
+  const splitNames = state.org.fields.some((f) => f.id === 'firstNames') && state.org.fields.some((f) => f.id === 'lastNames');
+  const orderedIds = ['firstNames', 'lastNames', 'documentNumber', 'municipality', 'neighborhood'];
+  const endIds = ['phone', 'voteContribution'];
+  const byId = Object.fromEntries(state.org.fields.map((f) => [f.id, f]));
+  const customForm = splitNames
+    ? `${orderedIds.map((id) => byId[id] ? dynamicField(byId[id], m?.data || {}) : '').join('')}<label>Fecha de nacimiento *<input name="birthDate" type="date" required value="${esc(m?.data?.birthDate || '')}"></label>${byId.phone ? dynamicField(byId.phone, m?.data || {}) : ''}<label>Correo *<input name="email" type="email" required maxlength="254" value="${esc(m?.email)}"></label>${byId.voteContribution ? dynamicField(byId.voteContribution, m?.data || {}) : ''}`
+    : `<label>Nombre completo *<input name="name" required maxlength="150" value="${esc(m?.name)}"></label><label>Correo de acceso *<input name="email" type="email" required value="${esc(m?.email)}"></label><label>Fecha de nacimiento<input name="birthDate" type="date" value="${esc(m?.data?.birthDate || '')}"></label>${state.org.fields.filter((f) => f.id !== 'birthDate').map((f) => dynamicField(f, m?.data || {})).join('')}`;
   modal(
     m ? 'Editar aliado' : 'Registrar aliado',
-    `<p class="muted">${m ? 'Actualiza los datos de la ficha.' : 'Se registrará debajo de ' + esc(state.members.find((x) => x.id === parentId)?.name) + '.'}</p><form id="memberForm"><div class="form-grid"><label>Nombre completo *<input name="name" required maxlength="150" value="${esc(m?.name)}"></label><label>Correo de acceso *<input name="email" type="email" required value="${esc(m?.email)}"></label><label>Fecha de nacimiento<input name="birthDate" type="date" value="${esc(m?.data?.birthDate || '')}"></label>${state.org.fields.filter((f) => f.id !== 'birthDate').map((f) => dynamicField(f, m?.data || {})).join('')}<label class="full">${m ? 'Nueva contraseña (opcional)' : loginAllowed ? 'Contraseña inicial *' : 'Sin acceso por nivel · contraseña opcional'}<input name="password" type="password" minlength="10" maxlength="200" ${m || !loginAllowed ? '' : 'required'} autocomplete="new-password"><small class="muted">Mínimo 10 caracteres. Compártela de forma privada con el aliado.</small></label>${loginAllowed ? '<label class="full">Foto de perfil<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"><small class="muted">La foto se ajustará antes de guardarla.</small></label>' : ''}${m && m.id !== state.user.id ? `<label>Estado<select name="status"><option value="active">Activo</option><option value="inactive" ${m.status === 'inactive' ? 'selected' : ''}>Inactivo</option></select></label>` : ''}</div><p class="error" id="formError"></p><div class="actions"><button type="button" id="cancel">Cancelar</button><button class="primary">Guardar aliado</button></div></form>`,
+    `<p class="muted">${m ? 'Actualiza los datos de la ficha.' : 'Se registrará debajo de ' + esc(state.members.find((x) => x.id === parentId)?.name) + '.'}</p><form id="memberForm"><div class="form-grid">${customForm}<label class="full">${m ? 'Nueva contraseña (opcional)' : loginAllowed ? 'Contraseña inicial *' : 'Sin acceso por nivel · contraseña opcional'}<input name="password" type="password" minlength="10" maxlength="200" ${m || !loginAllowed ? '' : 'required'} autocomplete="new-password"><small class="muted">Mínimo 10 caracteres. Compártela de forma privada con el aliado.</small></label>${loginAllowed ? '<label class="full">Foto de perfil<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"><small class="muted">La foto se ajustará antes de guardarla.</small></label>' : ''}${m && m.id !== state.user.id ? `<label>Estado<select name="status"><option value="active">Activo</option><option value="inactive" ${m.status === 'inactive' ? 'selected' : ''}>Inactivo</option></select></label>` : ''}</div><p class="error" id="formError"></p><div class="actions"><button type="button" id="cancel">Cancelar</button><button class="primary">Guardar aliado</button></div></form>`,
   );
+  bindMunicipalityAutocomplete();
   $('#cancel').onclick = () => $('#modal').close();
   $('#memberForm').onsubmit = async (e) => {
     e.preventDefault();
     const form = e.target,
       fd = new FormData(form),
       data = { ...m?.data };
+    const municipality = fd.get('field_municipality');
+    if (municipality && !ANTIOQUIA_MUNICIPALITIES.includes(municipality)) {
+      form.querySelector('[data-municipality]').setCustomValidity('Selecciona un municipio del listado de Antioquia.');
+      form.reportValidity();
+      return;
+    }
     data.birthDate = fd.get('birthDate') || '';
     for (const f of state.org.fields)
       data[f.id] = f.type === 'checkbox' ? fd.has('field_' + f.id) : fd.get('field_' + f.id);
     const b = {
-      name: fd.get('name'),
+      name: splitNames ? `${fd.get('field_firstNames')} ${fd.get('field_lastNames')}`.trim() : fd.get('name'),
       email: fd.get('email'),
       password: fd.get('password'),
       status: fd.get('status') || 'active',
