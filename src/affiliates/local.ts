@@ -19,7 +19,10 @@ async function main() {
   app.use(affiliatesHandler(prisma, config.tenantId, config.appId));
   app.enableShutdownHooks();
   await app.listen(Number(process.env.PORT || 4180), '127.0.0.1');
-  console.log('SuperApp · Afiliados integrado en http://localhost:' + (process.env.PORT || 4180));
+  console.log(
+    'SuperApp · Aliados por Antioquia integrado en http://localhost:' +
+      (process.env.PORT || 4180),
+  );
 }
 main().catch((e) => {
   console.error(e.message);

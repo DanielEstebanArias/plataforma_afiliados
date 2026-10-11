@@ -54,14 +54,14 @@ async function depth(tx: Prisma.TransactionClient, n: any, id: string) {
   const rows = await tx.$queryRaw<
     any[]
   >`SELECT level FROM "AffiliateMember" WHERE id=${uuid(id)}::uuid AND "networkId"=${n.id}::uuid`;
-  if (!rows.length) fail(404, 'Afiliado no disponible.');
+  if (!rows.length) fail(404, 'Aliado no disponible.');
   return Number(rows[0].level);
 }
 async function visible(tx: Prisma.TransactionClient, n: any, viewer: string, target: string) {
   const rows = await tx.$queryRaw<
     any[]
   >`SELECT id FROM "AffiliateMember" WHERE id=${uuid(target)}::uuid AND "networkId"=${n.id}::uuid AND (id=${viewer}::uuid OR ancestry @> ARRAY[${viewer}::uuid])`;
-  if (!rows.length) fail(404, 'Afiliado no disponible.');
+  if (!rows.length) fail(404, 'Aliado no disponible.');
 }
 function photo(base64: any) {
   if (typeof base64 !== 'string') fail(400, 'Selecciona una imagen.');
@@ -129,7 +129,7 @@ export class NetworkFeatures {
             csvLine([
               'Subregión',
               'ID subregión',
-              'ID afiliado',
+              'ID aliado',
               'Nombre',
               'Correo',
               'ID superior',
@@ -234,7 +234,7 @@ export class NetworkFeatures {
       if (memberId) {
         const member = await features.visible(root.id, memberId);
         if (withPhoto) {
-          if (!member.photo) fail(404, 'El afiliado no tiene foto.');
+          if (!member.photo) fail(404, 'El aliado no tiene foto.');
           return { bytes: member.photo, mime: member.mime };
         }
         return { member: clean(member) };
@@ -286,7 +286,7 @@ export class NetworkFeatures {
         const target = await tx.affiliateNetwork.findFirst({
           where: { id: uuid(id), tenantId: n.tenantId },
         });
-        if (!target || target.platformRoot)
+        if (!target)
           fail(403, 'Subregión no disponible para cambiar su raíz.');
         const input = b?.root;
         if (
@@ -314,7 +314,7 @@ export class NetworkFeatures {
           where: { tenantId: n.tenantId, networkId: target.id, email, id: { not: root.id } },
           select: { id: true },
         });
-        if (duplicate) fail(409, 'Ese correo ya pertenece a otro afiliado de la subregión.');
+        if (duplicate) fail(409, 'Ese correo ya pertenece a otro aliado de la subregión.');
         const salt = randomBytes(16).toString('hex');
         const password =
           salt + ':' + ((await hashPassword(input.password, salt, 64)) as Buffer).toString('hex');
@@ -335,7 +335,7 @@ export class NetworkFeatures {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        fail(409, 'Ese correo ya pertenece a otro afiliado de la subregión.');
+        fail(409, 'Ese correo ya pertenece a otro aliado de la subregión.');
       throw error;
     }
   }
@@ -656,7 +656,7 @@ export class NetworkFeatures {
       const member = await tx.affiliateMember.findUniqueOrThrow({ where: { id: me.id } });
       const fields = n.fields as any[];
       const defaults = [
-        { title: 'Afiliados por estado', groupBy: '$status', metric: 'count', chart: 'donut' },
+        { title: 'Aliados por estado', groupBy: '$status', metric: 'count', chart: 'donut' },
         { title: 'Registros por mes', groupBy: '$month', metric: 'count', chart: 'bar' },
       ];
       const widgets =

@@ -69,3 +69,54 @@ test('community requires an independent root identity and valid password', async
       status: 400,
     });
 });
+
+test('platform root account can be updated without removing the protected network', async () => {
+  const root = {
+    id: 'root-member',
+    tenantId: 'tenant',
+    networkId: id,
+    parentId: null,
+    name: 'Administrador',
+    email: 'admin@example.test',
+    role: 'ROOT',
+    status: 'active',
+    data: {},
+    createdAt: new Date(),
+  };
+  let saved: any;
+  const network = {
+    id,
+    tenantId: 'tenant',
+    appId: 'app',
+    platformRoot: true,
+    fields: [],
+    schemaId: 'schema',
+  };
+  const tx = {
+    affiliateNetwork: { findFirst: async () => network },
+    affiliateMember: {
+      findFirst: async ({ where }: any) => (where.role === 'ROOT' ? root : null),
+      update: async ({ data }: any) => (saved = { ...root, ...data }),
+    },
+    affiliateSession: { deleteMany: async () => ({ count: 1 }) },
+    dynamicRecord: { upsert: async () => ({}) },
+    auditLog: { create: async () => ({}) },
+  };
+  const features = new NetworkFeatures({
+    tx: async (fn: any) => fn(tx, network),
+  } as any);
+  await features.changeRoot(
+    { id: root.id, role: 'ROOT' },
+    id,
+    {
+      root: {
+        name: 'José Ignacio Cano',
+        email: 'jose@example.test',
+        password: 'NuevaClaveSegura2026!',
+      },
+    },
+  );
+  assert.equal(saved.name, 'José Ignacio Cano');
+  assert.equal(saved.email, 'jose@example.test');
+  assert.match(saved.password, /^[0-9a-f]+:[0-9a-f]+$/);
+});

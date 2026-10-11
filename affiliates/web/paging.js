@@ -11,7 +11,7 @@ async function renderDirectory() {
     );
     if (token !== state.listToken || !$('#network')) return;
     state.listRows = page.members;
-    host.innerHTML = `<div class="search-status">${page.total.toLocaleString('es-CO')} coincidencias en toda tu rama · hasta 50 por página</div>${page.members.length ? `<div class="table-wrap"><table><thead><tr><th>Afiliado</th><th>Correo</th><th>Estado</th><th>Directos</th><th></th></tr></thead><tbody>${page.members.map((m) => `<tr><td><div class="account">${avatar(m)}<b>${esc(m.name)}</b></div></td><td>${esc(m.email)}</td><td><span class="badge">${m.status === 'active' ? 'Activo' : 'Inactivo'}</span></td><td>${m.childCount}</td><td><button data-directory-member="${m.id}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No se encontraron afiliados.</div>'}<div class="pagination"><button id="previousPage" ${!state.cursor ? 'disabled' : ''}>← Anterior</button><span>Página ${(state.history || [null]).length}</span><button id="nextPage" ${!page.nextCursor ? 'disabled' : ''}>Siguiente →</button></div>`;
+    host.innerHTML = `<div class="search-status">${page.total.toLocaleString('es-CO')} coincidencias en toda tu rama · hasta 50 por página</div>${page.members.length ? `<div class="table-wrap"><table><thead><tr><th>Aliado</th><th>Correo</th><th>Estado</th><th>Directos</th><th></th></tr></thead><tbody>${page.members.map((m) => `<tr><td><div class="account">${avatar(m)}<b>${esc(m.name)}</b></div></td><td>${esc(m.email)}</td><td><span class="badge">${m.status === 'active' ? 'Activo' : 'Inactivo'}</span></td><td>${m.childCount}</td><td><button data-directory-member="${m.id}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No se encontraron aliados.</div>'}<div class="pagination"><button id="previousPage" ${!state.cursor ? 'disabled' : ''}>← Anterior</button><span>Página ${(state.history || [null]).length}</span><button id="nextPage" ${!page.nextCursor ? 'disabled' : ''}>Siguiente →</button></div>`;
     host
       .querySelectorAll('[data-directory-member]')
       .forEach((b) => (b.onclick = () => profile(b.dataset.directoryMember)));
@@ -41,7 +41,7 @@ async function loadBranch(id) {
       state.focus = id;
       state.members = [{ ...detail.member, childCount: page.total, hasMore: !!page.nextCursor }, ...page.members];
       state.branchPages = { [id]: page.nextCursor };
-      toast('Mostrando el siguiente grupo de esta rama. El directorio permite buscar cualquier afiliado.');
+      toast('Mostrando el siguiente grupo de esta rama. El directorio permite buscar cualquier aliado.');
       network();
       return;
     }

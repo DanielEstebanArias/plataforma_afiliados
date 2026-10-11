@@ -40,7 +40,7 @@ export async function startProduction() {
 }
 if (require.main === module)
   startProduction().catch((error: any) => {
-    console.error('No se pudo iniciar Afiliados:', error?.message || error);
+    console.error('No se pudo iniciar Aliados por Antioquia:', error?.message || error);
     if (process.env.NODE_ENV !== 'production') console.error(error?.stack || error);
     process.exit(1);
   });
