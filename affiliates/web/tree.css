@@ -106,7 +106,7 @@
 }
 .org-lines path {
   fill: none;
-  stroke: #aac6b6;
+  stroke: #91b6a7;
   stroke-width: 2;
 }
 .org-card {
@@ -141,8 +141,8 @@
   height: 6px;
   width: 6px;
   border-radius: 50%;
-  background: #6aa57e;
-  box-shadow: 0 0 0 3px #edf5ec;
+  background: #c8f000;
+  box-shadow: 0 0 0 3px #eef7c9;
 }
 .org-person {
   display: flex;
@@ -215,8 +215,8 @@
   color: #416b4c;
 }
 .org-root {
-  background: #174e3c;
-  border-color: #174e3c;
+  background: #073d34;
+  border-color: #073d34;
   box-shadow: 0 7px 24px #15473326;
 }
 .org-root .org-card-top {
@@ -237,13 +237,13 @@
   color: #c1d9c8;
 }
 .org-root .org-add {
-  background: #365f49;
-  color: #f2f8e9;
-  border-color: #4d705c;
+  background: #c8f000;
+  color: #032d27;
+  border-color: #c8f000;
 }
 .org-root .org-status {
-  background: #b9df94;
-  box-shadow: 0 0 0 3px #3b664c;
+  background: #c8f000;
+  box-shadow: 0 0 0 3px #315d4d;
 }
 .org-root .avatar {
   border-color: #376249;
