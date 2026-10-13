@@ -221,6 +221,9 @@ aside::after {
   gap: 10px;
   align-items: center;
 }
+.mobile-logout {
+  display: none;
+}
 .avatar {
   width: 40px;
   height: 40px;
@@ -723,7 +726,19 @@ a {
     padding: 20px 16px;
   }
   .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
     margin-bottom: 25px;
+  }
+  .mobile-logout {
+    display: block;
+    grid-column: 1 / -1;
+    width: 100%;
+    padding: 10px 14px;
+    border-color: #cbd9d1;
+    background: #edf3ef;
+    color: var(--brand-forest);
   }
   .hero {
     align-items: flex-start;
