@@ -2,7 +2,10 @@ async function renderDirectory() {
   const host = $('#network');
   if (!host) return;
   const token = (state.listToken = (state.listToken || 0) + 1);
-  host.innerHTML = '<div class="empty">Buscando en toda tu rama…</div>';
+  const hadResults = !!host.querySelector('.table-wrap, .empty');
+  host.classList.add('directory-searching');
+  host.setAttribute('aria-busy', 'true');
+  if (!hadResults) host.innerHTML = '<div class="empty">Buscando en toda tu rama…</div>';
   try {
     const page = await api(
       '/members?limit=50&q=' +
@@ -10,6 +13,8 @@ async function renderDirectory() {
         (state.cursor ? '&after=' + state.cursor : ''),
     );
     if (token !== state.listToken || !$('#network')) return;
+    host.classList.remove('directory-searching');
+    host.removeAttribute('aria-busy');
     state.listRows = page.members;
     renderSearchSuggestions(page.members);
     host.innerHTML = `<div class="search-status">${page.total.toLocaleString('es-CO')} coincidencias en toda tu rama · hasta 50 por página</div>${page.members.length ? `<div class="table-wrap"><table><thead><tr><th>Aliado</th><th>Correo</th><th>Estado</th><th>Directos</th><th></th></tr></thead><tbody>${page.members.map((m) => `<tr><td><div class="account">${avatar(m)}<b>${esc(m.name)}</b></div></td><td>${esc(m.email)}</td><td><span class="badge">${m.status === 'active' ? 'Activo' : 'Inactivo'}</span></td><td>${m.childCount}</td><td><button data-directory-member="${m.id}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No se encontraron aliados.</div>'}<div class="pagination"><button id="previousPage" ${!state.cursor ? 'disabled' : ''}>← Anterior</button><span>Página ${(state.history || [null]).length}</span><button id="nextPage" ${!page.nextCursor ? 'disabled' : ''}>Siguiente →</button></div>`;
@@ -28,7 +33,11 @@ async function renderDirectory() {
     };
     photos();
   } catch (e) {
-    if (token === state.listToken && $('#network')) host.textContent = e.message;
+    if (token === state.listToken && $('#network')) {
+      host.classList.remove('directory-searching');
+      host.removeAttribute('aria-busy');
+      host.textContent = e.message;
+    }
   }
 }
 function renderSearchSuggestions(members) {
