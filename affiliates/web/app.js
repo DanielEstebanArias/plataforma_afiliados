@@ -467,8 +467,10 @@ async function memberForm(m, parentId) {
       return;
     }
     data.birthDate = fd.get('birthDate') || '';
-    for (const f of state.org.fields)
+    for (const f of state.org.fields) {
+      if (f.id === 'birthDate') continue;
       data[f.id] = f.type === 'checkbox' ? fd.has('field_' + f.id) : fd.get('field_' + f.id);
+    }
     const b = {
       name: splitNames ? `${fd.get('field_firstNames')} ${fd.get('field_lastNames')}`.trim() : fd.get('name'),
       email: fd.get('email'),
