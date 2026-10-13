@@ -221,3 +221,11 @@ test('member form preserves the dedicated birth date instead of overwriting it',
   assert.match(app, /data\.birthDate = fd\.get\('birthDate'\) \|\| '';/);
   assert.match(app, /if \(f\.id === 'birthDate'\) continue;/);
 });
+
+test('mobile layout exposes a functional logout action', () => {
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  const style = fs.readFileSync('affiliates/web/style.css', 'utf8');
+  assert.match(app, /id="logoutMobile"/);
+  assert.match(app, /\$\('#logoutMobile'\).*logout/);
+  assert.match(style, /@media \(max-width: 700px\)[\s\S]*\.mobile-logout \{[\s\S]*display: block;/);
+});
