@@ -650,6 +650,10 @@ test(
         (await call('/members?q=person10050%40scale.test', 'GET', undefined, root.auth)).data.total,
         1,
       );
+      assert.equal(
+        (await call('/members?q=bogota%20persona%2010050', 'GET', undefined, root.auth)).data.total,
+        1,
+      );
       t = performance.now();
       const stats = (await call('/stats', 'GET', undefined, root.auth)).data;
       timings.stats = Math.round(performance.now() - t);
