@@ -16,7 +16,6 @@ async function renderDirectory() {
     host.classList.remove('directory-searching');
     host.removeAttribute('aria-busy');
     state.listRows = page.members;
-    renderSearchSuggestions(page.members);
     host.innerHTML = `<div class="search-status">${page.total.toLocaleString('es-CO')} coincidencias en toda tu rama · hasta 50 por página</div>${page.members.length ? `<div class="table-wrap"><table><thead><tr><th>Aliado</th><th>Correo</th><th>Estado</th><th>Directos</th><th></th></tr></thead><tbody>${page.members.map((m) => `<tr><td><div class="account">${avatar(m)}<b>${esc(m.name)}</b></div></td><td>${esc(m.email)}</td><td><span class="badge">${m.status === 'active' ? 'Activo' : 'Inactivo'}</span></td><td>${m.childCount}</td><td><button data-directory-member="${m.id}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No se encontraron aliados.</div>'}<div class="pagination"><button id="previousPage" ${!state.cursor ? 'disabled' : ''}>← Anterior</button><span>Página ${(state.history || [null]).length}</span><button id="nextPage" ${!page.nextCursor ? 'disabled' : ''}>Siguiente →</button></div>`;
     host
       .querySelectorAll('[data-directory-member]')
@@ -39,25 +38,6 @@ async function renderDirectory() {
       host.textContent = e.message;
     }
   }
-}
-function renderSearchSuggestions(members) {
-  const suggestions = $('#searchSuggestions');
-  const input = $('#search');
-  if (!suggestions || !input) return;
-  const show = !!state.query.trim() && members.length > 0;
-  suggestions.hidden = !show;
-  input.setAttribute('aria-expanded', String(show));
-  if (!show) {
-    suggestions.innerHTML = '';
-    return;
-  }
-  suggestions.innerHTML = members
-    .slice(0, 6)
-    .map((m) => `<button type="button" role="option" data-search-member="${m.id}">${avatar(m)}<span><b>${esc(m.name)}</b><small>${esc(m.email)}${m.data?.city ? ' · ' + esc(m.data.city) : ''}</small></span></button>`)
-    .join('');
-  suggestions.querySelectorAll('[data-search-member]').forEach((button) => {
-    button.onclick = () => profile(button.dataset.searchMember);
-  });
 }
 async function loadBranch(id) {
   try {

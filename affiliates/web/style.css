@@ -349,46 +349,6 @@ aside::after {
   font-size: 20px;
   color: #567268;
 }
-.search-suggestions {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 7px);
-  left: 0;
-  right: 0;
-  padding: 6px;
-  border: 1px solid #d5e1d9;
-  border-radius: 13px;
-  background: #fff;
-  box-shadow: 0 16px 40px #073d3424;
-}
-.search-suggestions button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  text-align: left;
-  background: transparent;
-}
-.search-suggestions button:hover,
-.search-suggestions button:focus-visible {
-  background: #edf4ef;
-}
-.search-suggestions .avatar {
-  flex: 0 0 auto;
-}
-.search-suggestions span,
-.search-suggestions small {
-  display: block;
-  min-width: 0;
-}
-.search-suggestions small {
-  margin-top: 3px;
-  overflow: hidden;
-  color: #6e8176;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .board {
   border: 1px solid #dbe4dc;
   background: #fff;
