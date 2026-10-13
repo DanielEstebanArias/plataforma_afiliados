@@ -215,3 +215,9 @@ test('directory search keeps existing results mounted while the next match page 
   assert.ok(!app.includes('searchSuggestions'));
   assert.ok(!paging.includes('renderSearchSuggestions'));
 });
+
+test('member form preserves the dedicated birth date instead of overwriting it', () => {
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  assert.match(app, /data\.birthDate = fd\.get\('birthDate'\) \|\| '';/);
+  assert.match(app, /if \(f\.id === 'birthDate'\) continue;/);
+});
