@@ -207,8 +207,11 @@ test('expand loads every paginated branch before unfolding the complete tree', (
 });
 
 test('directory search keeps existing results mounted while the next match page loads', () => {
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
   const paging = fs.readFileSync('affiliates/web/paging.js', 'utf8');
   assert.ok(paging.includes("host.classList.add('directory-searching')"));
   assert.ok(paging.includes('if (!hadResults) host.innerHTML'));
   assert.ok(paging.includes("host.removeAttribute('aria-busy')"));
+  assert.ok(!app.includes('searchSuggestions'));
+  assert.ok(!paging.includes('renderSearchSuggestions'));
 });
