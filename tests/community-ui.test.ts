@@ -205,3 +205,10 @@ test('expand loads every paginated branch before unfolding the complete tree', (
   assert.match(paging, /state\.wholeTreeLoaded = true/);
   assert.match(app, /state\.paged \? loadWholeTree : null/);
 });
+
+test('directory search keeps existing results mounted while the next match page loads', () => {
+  const paging = fs.readFileSync('affiliates/web/paging.js', 'utf8');
+  assert.ok(paging.includes("host.classList.add('directory-searching')"));
+  assert.ok(paging.includes('if (!hadResults) host.innerHTML'));
+  assert.ok(paging.includes("host.removeAttribute('aria-busy')"));
+});

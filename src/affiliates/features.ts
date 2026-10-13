@@ -455,7 +455,20 @@ export class NetworkFeatures {
       const parent = params.get('parentId');
       if (parent) await visible(tx, n, viewer, parent);
       const q = (params.get('q') || '').trim().slice(0, 200);
-      const filter = Prisma.sql`${parent ? Prisma.sql`AND m."parentId"=${parent}::uuid` : Prisma.empty} ${q ? Prisma.sql`AND (m.name ILIKE ${'%' + q + '%'} OR m.email ILIKE ${'%' + q + '%'} OR m.data::text ILIKE ${'%' + q + '%'})` : Prisma.empty}`;
+      const terms = q
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      const searchable = Prisma.sql`translate(lower(concat_ws(' ',m.name,m.email,m.data::text)),'áéíóúüñ','aeiouun')`;
+      const searchFilter = terms.length
+        ? Prisma.sql`AND ${Prisma.join(
+            terms.map((term) => Prisma.sql`${searchable} LIKE ${'%' + term + '%'}`),
+            ' AND ',
+          )}`
+        : Prisma.empty;
+      const filter = Prisma.sql`${parent ? Prisma.sql`AND m."parentId"=${parent}::uuid` : Prisma.empty} ${searchFilter}`;
       const cte = parent
         ? Prisma.sql`WITH tree AS (SELECT * FROM "AffiliateMember" WHERE "networkId"=${n.id}::uuid AND "parentId"=${parent}::uuid)`
         : tree(n.id, viewer);
