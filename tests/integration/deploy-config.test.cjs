@@ -8,6 +8,8 @@ test('Railway image serves frontend and API from one service',()=>{
  assert.equal(cfg.deploy.numReplicas,1);
  assert.match(dockerfile,/^COPY affiliates\/server\.cjs \.\/affiliates\/server\.cjs$/m);
  assert.match(dockerfile,/^COPY affiliates\/web \.\/affiliates\/web$/m);
+ const prepare=fs.readFileSync('deploy/railway/prepare-db.cjs','utf8');
+ assert.match(prepare,/202610140001_member_login_override/);
  assert.ok(fs.existsSync('affiliates/web/index.html'));
  assert.deepEqual(JSON.parse(fs.readFileSync('affiliates/web/app-config.json','utf8')),{apiBase:''});
  assert.equal(fs.existsSync('vercel.json'),false);
