@@ -2,3 +2,5 @@
 
 .hero:has(#exportAllCommunities) { flex-wrap: wrap; }
 .directory-searching{position:relative}.directory-searching::after{content:'Buscando…';position:absolute;z-index:3;top:9px;right:20px;padding:5px 10px;border-radius:999px;background:#edf4ef;color:#456558;font-size:11px;box-shadow:0 2px 8px #073d3414}
+.access-member { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1rem 0; border-bottom:1px solid var(--line); }
+.access-member small { display:block; margin-top:.25rem; color:var(--muted); }

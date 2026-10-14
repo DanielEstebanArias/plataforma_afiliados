@@ -215,6 +215,12 @@ test('directory search keeps existing results mounted while the next match page 
   assert.ok(!app.includes('searchSuggestions'));
   assert.ok(!paging.includes('renderSearchSuggestions'));
 });
+test('directory search shows only the native clear control', () => {
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  const style = fs.readFileSync('affiliates/web/style.css', 'utf8');
+  assert.ok(app.includes('id="clearSearch"'));
+  assert.ok(style.includes('#clearSearch { display: none !important; }'));
+});
 
 test('member form preserves the dedicated birth date instead of overwriting it', () => {
   const app = fs.readFileSync('affiliates/web/app.js', 'utf8');

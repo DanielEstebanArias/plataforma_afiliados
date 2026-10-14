@@ -42,12 +42,14 @@ const clean = (m: any) => ({
   email: m.email,
   role: m.role,
   status: m.status,
+  level: Number(m.level || 0),
+  loginOverride: !!m.loginOverride,
   data: m.data,
   hasPhoto: m.hasPhoto ?? !!m.photo,
   created: m.createdAt,
   childCount: Number(m.childCount || 0),
 });
-const selection = Prisma.sql`m.id,m."parentId",m.name,m.email,m.role,m.status,m.data,m."createdAt",m."hasPhoto",(SELECT count(*)::int FROM "AffiliateMember" c WHERE c."networkId"=m."networkId" AND c."parentId"=m.id) AS "childCount"`;
+const selection = Prisma.sql`m.id,m."parentId",m.name,m.email,m.role,m.status,m.level,m."loginOverride",m.data,m."createdAt",m."hasPhoto",(SELECT count(*)::int FROM "AffiliateMember" c WHERE c."networkId"=m."networkId" AND c."parentId"=m.id) AS "childCount"`;
 const tree = (network: string, root: string) =>
   Prisma.sql`WITH tree AS (SELECT *,level-(SELECT level FROM "AffiliateMember" WHERE id=${root}::uuid) AS depth FROM "AffiliateMember" WHERE "networkId"=${network}::uuid AND (id=${root}::uuid OR ancestry @> ARRAY[${root}::uuid]))`;
 async function depth(tx: Prisma.TransactionClient, n: any, id: string) {
@@ -321,10 +323,15 @@ export class NetworkFeatures {
             ? 'La subregión está pendiente de aprobación.'
             : 'La subregión no está habilitada.',
         );
-      const level = await depth(tx, n, id);
-      if (n.maxLoginLevel !== null && level > n.maxLoginLevel)
+      const member = await tx.affiliateMember.findFirst({
+        where: { id: uuid(id), networkId: n.id },
+        select: { level: true, loginOverride: true },
+      });
+      if (!member) fail(404, 'Aliado no disponible.');
+      const level = Number(member.level);
+      if (!member.loginOverride && n.maxLoginLevel !== null && level > n.maxLoginLevel)
         fail(403, 'Tu afiliación está registrada, pero tu nivel no tiene acceso a la app.');
-      return { level, maxLoginLevel: n.maxLoginLevel, superuser: n.platformRoot };
+      return { level, maxLoginLevel: n.maxLoginLevel, loginOverride: member.loginOverride, superuser: n.platformRoot };
     });
   }
   async changeRoot(me: any, id: string, b: any) {
@@ -425,13 +432,45 @@ export class NetworkFeatures {
   async updateMemberPhoto(viewer: string, target: string, base64: string) {
     return this.store.tx(async (tx, n) => {
       await visible(tx, n, viewer, target);
-      const level = await depth(tx, n, target);
-      if (n.maxLoginLevel !== null && level > n.maxLoginLevel)
+      const member = await tx.affiliateMember.findFirstOrThrow({
+        where: { id: uuid(target), networkId: n.id },
+        select: { level: true, loginOverride: true },
+      });
+      const level = Number(member.level);
+      if (!member.loginOverride && n.maxLoginLevel !== null && level > n.maxLoginLevel)
         fail(403, 'Solo los aliados con acceso a la plataforma pueden cargar una foto.');
       const image = photo(base64);
       await tx.affiliateMember.update({ where: { id: target }, data: image });
       await this.audit(tx, viewer, 'member.photo.updated', target, { level });
       return { ok: true };
+    });
+  }
+  async updateMemberAccess(me: any, target: string, b: any) {
+    return this.store.tx(async (tx, n) => {
+      if (!this.store.isCommunityAdmin)
+        fail(403, 'Solo el superadministrador concede accesos individuales.');
+      const enabled = b?.enabled;
+      if (typeof enabled !== 'boolean') fail(400, 'Selecciona si el aliado tendrá acceso.');
+      const member = await tx.affiliateMember.findFirst({
+        where: { id: uuid(target), tenantId: n.tenantId, networkId: n.id },
+      });
+      if (!member) fail(404, 'Aliado no disponible.');
+      if (member.role === 'ROOT') fail(400, 'La cuenta raíz ya tiene acceso administrativo.');
+      const data: any = { loginOverride: enabled };
+      if (b.password !== undefined && b.password !== '') {
+        if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200)
+          fail(400, 'La nueva contraseña debe tener entre 10 y 200 caracteres.');
+        const salt = randomBytes(16).toString('hex');
+        data.password = salt + ':' + ((await hashPassword(b.password, salt, 64)) as Buffer).toString('hex');
+      }
+      await tx.affiliateMember.update({ where: { id: member.id }, data });
+      if (!enabled) await tx.affiliateSession.deleteMany({ where: { networkId: n.id, memberId: member.id } });
+      await this.audit(tx, me.id, 'member.access.override.updated', member.id, {
+        enabled,
+        level: member.level,
+        passwordChanged: !!data.password,
+      });
+      return { id: member.id, enabled, level: member.level };
     });
   }
   async detail(viewer: string, target: string) {
@@ -475,7 +514,7 @@ export class NetworkFeatures {
       const rows = await tx.$queryRaw<any[]>(
         Prisma.sql`${cte}, page AS MATERIALIZED (
           SELECT m.id,m."parentId",m.name,m.email,m.role,m.status,m.data,m."createdAt",m."networkId",
-            (m.photo IS NOT NULL) AS "hasPhoto"
+            m.level,m."loginOverride",(m.photo IS NOT NULL) AS "hasPhoto"
           FROM tree m WHERE m."networkId"=${n.id}::uuid ${filter}
             ${cursor ? Prisma.sql`AND m.id>${cursor}::uuid` : Prisma.empty}
           ORDER BY m.id LIMIT ${size + 1}

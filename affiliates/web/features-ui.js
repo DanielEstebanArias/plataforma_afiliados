@@ -340,7 +340,7 @@ async function renderAccess() {
   try {
     const s = await api('/settings');
     state.settings = s;
-    host.innerHTML = `<div class="eyebrow">Administración de la subregión</div><h1>Acceso por nivel.</h1><p class="muted">La raíz es el nivel 0. Sus aliados directos son el nivel 1, y así sucesivamente.</p><article class="core-card"><div class="community-mini">${s.hasPhoto ? `<img data-community-photo="${s.id}" alt="Foto de subregión">` : ''}<div><h2>${esc(s.name)}</h2><p>Los aliados debajo del límite seguirán registrados, aunque no podrán iniciar sesión.</p></div></div>${state.user.role === 'ROOT' ? `<form id="accessForm"><label class="check"><input type="checkbox" name="unlimited" ${s.maxLoginLevel === null ? 'checked' : ''}>Permitir acceso en todos los niveles</label><label>Nivel máximo con acceso<input name="level" required type="number" min="0" max="10000" value="${s.maxLoginLevel ?? 2}" ${s.maxLoginLevel === null ? 'disabled' : ''}></label><p class="form-note">Los cambios se aplican también a las sesiones ya abiertas. Cada aliado con acceso ve exclusivamente su propia rama.</p><p id="accessError" class="error"></p><button class="primary">Guardar permisos</button></form><br><button id="accessPhoto">Cambiar foto de subregión</button>` : `<p>Acceso permitido: ${s.maxLoginLevel === null ? 'todos los niveles' : 'hasta el nivel ' + s.maxLoginLevel}.</p>`}</article>`;
+    host.innerHTML = `<div class="eyebrow">Administración de la subregión</div><h1>Acceso por nivel.</h1><p class="muted">La raíz es el nivel 0. Sus aliados directos son el nivel 1, y así sucesivamente.</p><article class="core-card"><div class="community-mini">${s.hasPhoto ? `<img data-community-photo="${s.id}" alt="Foto de subregión">` : ''}<div><h2>${esc(s.name)}</h2><p>Los aliados debajo del límite seguirán registrados, aunque no podrán iniciar sesión.</p></div></div>${state.user.role === 'ROOT' ? `<form id="accessForm"><label class="check"><input type="checkbox" name="unlimited" ${s.maxLoginLevel === null ? 'checked' : ''}>Permitir acceso en todos los niveles</label><label>Nivel máximo con acceso<input name="level" required type="number" min="0" max="10000" value="${s.maxLoginLevel ?? 2}" ${s.maxLoginLevel === null ? 'disabled' : ''}></label><p class="form-note">Los cambios se aplican también a las sesiones ya abiertas. Cada aliado con acceso ve exclusivamente su propia rama.</p><p id="accessError" class="error"></p><button class="primary">Guardar permisos</button></form><br><button id="accessPhoto">Cambiar foto de subregión</button>${s.superuser ? '<hr><h2>Permisos individuales</h2><p class="muted">Busca un aliado de cualquier nivel para concederle acceso excepcional a la plataforma.</p><label>Buscar aliado<input id="individualAccessSearch" type="search" autocomplete="off" placeholder="Nombre, correo u otro dato…"></label><div id="individualAccessResults"></div>' : ''}` : `<p>Acceso permitido: ${s.maxLoginLevel === null ? 'todos los niveles' : 'hasta el nivel ' + s.maxLoginLevel}.</p>`}</article>`;
     const f = $('#accessForm');
     if (f) {
       f.elements.unlimited.onchange = () =>
@@ -359,6 +359,36 @@ async function renderAccess() {
         }
       };
       $('#accessPhoto').onclick = () => editCommunityPhoto(s.id);
+      if ($('#individualAccessSearch')) {
+        let timer;
+        const load = async () => {
+          const q = $('#individualAccessSearch').value.trim();
+          const result = await api('/members?limit=50&q=' + encodeURIComponent(q));
+          const members = result.members.filter((member) => member.role !== 'ROOT');
+          $('#individualAccessResults').innerHTML = members.length
+            ? members.map((member) => `<div class="access-member"><div><b>${esc(member.name)}</b><small>${esc(member.email)} · Nivel ${member.level}</small></div><button type="button" data-member-access="${member.id}" data-enabled="${member.loginOverride ? 'true' : 'false'}" class="${member.loginOverride ? 'ghost' : 'primary'}">${member.loginOverride ? 'Retirar permiso' : 'Dar permiso'}</button></div>`).join('')
+            : '<p class="muted">No se encontraron aliados.</p>';
+          document.querySelectorAll('[data-member-access]').forEach((button) => button.onclick = async () => {
+            const enabled = button.dataset.enabled !== 'true';
+            let password = '';
+            if (enabled) password = prompt('Nueva contraseña para el aliado (opcional, mínimo 10 caracteres):') || '';
+            button.disabled = true;
+            try {
+              await post('/members/' + button.dataset.memberAccess + '/access', { enabled, password }, 'PUT');
+              toast(enabled ? 'Acceso individual habilitado.' : 'Acceso individual retirado.');
+              await load();
+            } catch (error) {
+              toast(error.message);
+              button.disabled = false;
+            }
+          });
+        };
+        $('#individualAccessSearch').oninput = () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => load().catch((error) => toast(error.message)), 180);
+        };
+        await load();
+      }
     }
     communityPhotos();
   } catch (e) {

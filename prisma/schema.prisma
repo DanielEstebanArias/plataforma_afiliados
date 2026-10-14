@@ -116,6 +116,7 @@ model AffiliateMember {
   password String
   role String
   status String @default("active")
+  loginOverride Boolean @default(false)
   dashboard Json @default("[]")
   data Json
   photo Bytes?
