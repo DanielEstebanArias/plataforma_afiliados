@@ -281,21 +281,10 @@ function render() {
     );
     $('#search').oninput = (e) => {
       state.query = e.target.value;
-      $('#clearSearch').hidden = !state.query;
       state.cursor = null;
       state.history = [null];
       clearTimeout(state.searchTimer);
       state.searchTimer = setTimeout(() => network(), 180);
-    };
-    $('#search').onkeydown = (e) => {
-      if (e.key === 'Escape' && state.query) $('#clearSearch').click();
-    };
-    $('#clearSearch').onclick = () => {
-      state.query = '';
-      state.cursor = null;
-      state.history = [null];
-      render();
-      $('#search')?.focus();
     };
     $('#export').onclick = exportCSV;
     network();

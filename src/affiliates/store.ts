@@ -63,6 +63,7 @@ const memberRow = (m: any) =>
     password: m.password,
     role: m.role,
     status: m.status,
+    login_override: m.loginOverride,
     data: JSON.stringify(m.data),
     photo: m.photo && Buffer.from(m.photo),
     mime: m.mime,

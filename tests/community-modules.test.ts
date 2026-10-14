@@ -86,7 +86,10 @@ test('member photo is restricted to levels with platform access', async () => {
   let query = 0;
   const tx = {
     $queryRaw: async () => (++query === 1 ? [{ id }] : [{ level: 3 }]),
-    affiliateMember: { update: async (value: any) => updates.push(value) },
+    affiliateMember: {
+      findFirstOrThrow: async () => ({ level: 3, loginOverride: false }),
+      update: async (value: any) => updates.push(value),
+    },
     auditLog: { create: async () => ({}) },
   };
   const features = new NetworkFeatures({
@@ -98,6 +101,35 @@ test('member photo is restricted to levels with platform access', async () => {
     message: 'Solo los aliados con acceso a la plataforma pueden cargar una foto.',
   });
   assert.equal(updates.length, 0);
+});
+test('individual override lets a lower-level ally upload a photo', async () => {
+  const updates: any[] = [];
+  const tx = {
+    $queryRaw: async () => [{ id }],
+    affiliateMember: {
+      findFirstOrThrow: async () => ({ level: 8, loginOverride: true }),
+      update: async (value: any) => updates.push(value),
+    },
+    auditLog: { create: async () => ({}) },
+  };
+  const features = new NetworkFeatures({
+    tx: async (fn: any) =>
+      fn(tx, { id, tenantId: 'tenant', maxLoginLevel: 2, platformRoot: false }),
+  } as any);
+  await assert.rejects(features.updateMemberPhoto(id, id, 'invalid'), {
+    status: 400,
+    message: 'Usa JPG o PNG, máximo 2 MB.',
+  });
+});
+test('only central superadministrator grants an individual access override', async () => {
+  const features = new NetworkFeatures({
+    isCommunityAdmin: false,
+    tx: async (fn: any) => fn({}, { id, tenantId: 'tenant' }),
+  } as any);
+  await assert.rejects(features.updateMemberAccess({ id }, id, { enabled: true }), {
+    status: 403,
+    message: 'Solo el superadministrador concede accesos individuales.',
+  });
 });
 test('module configuration requires explicit boolean values for all modules', async () => {
   const { features, me } = setup(true);

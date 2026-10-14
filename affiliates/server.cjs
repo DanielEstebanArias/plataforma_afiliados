@@ -266,7 +266,7 @@ function createApp(
           if (!(p === '/api/me' && method === 'GET') && !(p === '/api/logout' && method === 'POST'))
             await db.terms.requireAccepted(me);
         }
-        const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|members(?:\/[^/]+(?:\/photo)?)?))$/);
+        const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|members(?:\/[^/]+(?:\/(?:photo|access))?)?))$/);
         if (adminRoute) {
           if (!db.selectCommunity) fail(404, 'Subregión no disponible.');
           me = await db.selectCommunity(me, adminRoute[1]);
@@ -360,6 +360,9 @@ function createApp(
             if(typeof input!=='string') throw Object.assign(new Error('Selecciona una imagen.'),{status:400});
             return send(await db.features.updateMemberPhoto(me.id,memberPhoto[1],input));
           }
+          const memberAccess=p.match(/^\/api\/members\/([^/]+)\/access$/);
+          if(memberAccess&&method==='PUT')
+            return send(await db.features.updateMemberAccess(me,memberAccess[1],await body(req)));
         }
         if (p === '/api/superapp' && method === 'GET') {
           if (me.role !== 'ROOT' || !db.integrated)
