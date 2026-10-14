@@ -21,6 +21,10 @@ test('global columns merge matching names and types across distinct field IDs', 
     },
   ]);
   assert.equal(result.columns.length, 4);
+  assert.deepEqual(
+    result.columns.map((column) => column.label),
+    ['Ciudad [text]', 'Puntos [number]', 'Puntos [text]', 'Zona [text]'],
+  );
   assert.equal(result.mappings.get('a')!.get(0), 'city');
   assert.equal(result.mappings.get('b')!.get(0), 'town');
   assert.equal(result.mappings.get('a')!.has(3), false);

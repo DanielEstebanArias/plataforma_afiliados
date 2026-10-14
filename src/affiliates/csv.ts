@@ -17,7 +17,7 @@ export function exportColumns(networks: { id: string; fields: ExportField[] }[])
         indexes.set(key, columns.length);
         columns.push({
           key,
-          label: `Campo: ${field.label} [${field.type}]${sameName ? ' (' + field.id + ')' : ''}`,
+          label: `${field.label} [${field.type}]${sameName ? ' (' + field.id + ')' : ''}`,
         });
       }
       mapping.set(indexes.get(key)!, field.id);

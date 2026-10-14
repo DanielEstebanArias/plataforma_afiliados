@@ -704,8 +704,8 @@ test(
           ),
         );
       const columns = rows.shift()!;
-      const zoneColumn = columns.indexOf('Campo: Zona [text]');
-      const cityColumn = columns.indexOf('Campo: Ciudad [text]');
+      const zoneColumn = columns.indexOf('Zona [text]');
+      const cityColumn = columns.indexOf('Ciudad [text]');
       assert.ok(zoneColumn > 0 && cityColumn > 0);
       const childExport = rows.find((row) => row[2] === descendant.data.member.id)!;
       assert.equal(childExport[0], 'Pending Test');
