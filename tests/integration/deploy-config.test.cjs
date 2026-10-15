@@ -10,6 +10,7 @@ test('Railway image serves frontend and API from one service',()=>{
  assert.match(dockerfile,/^COPY affiliates\/web \.\/affiliates\/web$/m);
  const prepare=fs.readFileSync('deploy/railway/prepare-db.cjs','utf8');
  assert.match(prepare,/202610140001_member_login_override/);
+ assert.match(prepare,/202610150002_password_recovery/);
  assert.match(prepare,/202610150001_campaigns/);
  assert.ok(fs.existsSync('affiliates/web/campaign.html'));
  assert.ok(fs.existsSync('affiliates/web/index.html'));

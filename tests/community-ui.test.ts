@@ -237,6 +237,14 @@ test('mobile layout exposes a functional logout action', () => {
   assert.match(style, /@media \(max-width: 700px\)[\s\S]*\.mobile-logout \{[\s\S]*display: block;/);
 });
 
+test('login exposes password recovery prepared for Resend', () => {
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  assert.match(app, /¿Olvidaste tu contraseña\?/);
+  assert.match(app, /password-recovery\/request/);
+  assert.match(app, /password-recovery\/confirm/);
+  assert.match(app, /Servicio pendiente de configuración/);
+});
+
 test('campaign management is isolated in a root-only navigation module', () => {
   const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
   const campaigns = fs.readFileSync('affiliates/web/campaign-admin.js', 'utf8');

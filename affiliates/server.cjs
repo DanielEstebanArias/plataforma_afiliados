@@ -145,6 +145,21 @@ function createApp(
           res.writeHead(200, { 'Content-Type': result.mime, 'Cache-Control': 'no-cache' });
           return res.end(Buffer.from(result.bytes));
         }
+        if(p==='/api/password-recovery/request'&&method==='POST'){
+          const b=await body(req),now=Date.now(),key='recovery:'+hash(String(b.email||'').trim().toLowerCase());
+          let rate=rates.get(key);if(!rate||rate.until<now){rate={count:0,until:now+900000};rates.set(key,rate);}
+          if(++rate.count>5)fail(429,'Demasiadas solicitudes. Espera 15 minutos.');
+          if(!db.passwordRecovery)return send({ok:true,mailReady:false});
+          return send(await db.passwordRecovery.request(b.email));
+        }
+        if(p==='/api/password-recovery/confirm'&&method==='POST'){
+          const b=await body(req),now=Date.now(),key='recovery-token:'+hash(String(b.token||''));
+          let rate=rates.get(key);if(!rate||rate.until<now){rate={count:0,until:now+900000};rates.set(key,rate);}
+          if(++rate.count>10)fail(429,'Demasiados intentos. Espera 15 minutos.');
+          if(!db.passwordRecovery)fail(503,'La recuperación de contraseña no está disponible.');
+          if(typeof b.token!=='string'||!/^[A-Za-z0-9_-]{40,80}$/.test(b.token))fail(400,'El enlace no es válido o ya venció.');
+          return send(await db.passwordRecovery.consume(b.token,await passwordHash(b.password)));
+        }
         const publicCampaign=p.match(/^\/api\/public\/campaigns\/([A-Za-z0-9_-]{20,80})(\/submit)?$/);
         if(publicCampaign&&db.campaigns){
           if(!publicCampaign[2]&&method==='GET')return send(await db.campaigns.publicForm(publicCampaign[1]));
