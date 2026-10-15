@@ -145,6 +145,17 @@ function createApp(
           res.writeHead(200, { 'Content-Type': result.mime, 'Cache-Control': 'no-cache' });
           return res.end(Buffer.from(result.bytes));
         }
+        const publicCampaign=p.match(/^\/api\/public\/campaigns\/([A-Za-z0-9_-]{20,80})(\/submit)?$/);
+        if(publicCampaign&&db.campaigns){
+          if(!publicCampaign[2]&&method==='GET')return send(await db.campaigns.publicForm(publicCampaign[1]));
+          if(publicCampaign[2]&&method==='POST'){
+            const now=Date.now(),key='campaign:'+hash(publicCampaign[1]+':'+String(req.socket?.remoteAddress||''));
+            let rate=rates.get(key);if(!rate||rate.until<now){rate={count:0,until:now+900000};rates.set(key,rate);}
+            if(++rate.count>60)fail(429,'Demasiados envíos. Intenta más tarde.');
+            return send(await db.campaigns.submit(publicCampaign[1],await body(req)),201);
+          }
+          fail(405,'Método no permitido.');
+        }
         if (p === '/api/setup' && method === 'POST') {
           if (await org()) fail(409, 'La organización ya existe.');
           const b = await body(req);
@@ -266,7 +277,7 @@ function createApp(
           if (!(p === '/api/me' && method === 'GET') && !(p === '/api/logout' && method === 'POST'))
             await db.terms.requireAccepted(me);
         }
-        const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|members(?:\/[^/]+(?:\/(?:photo|access))?)?))$/);
+        const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|campaigns(?:\/entries(?:\/[^/]+)?|\/[^/]+(?:\/qr)?)?|members(?:\/[^/]+(?:\/(?:photo|access))?)?))$/);
         if (adminRoute) {
           if (!db.selectCommunity) fail(404, 'Subregión no disponible.');
           me = await db.selectCommunity(me, adminRoute[1]);
@@ -328,6 +339,24 @@ function createApp(
           }
           if(p==='/api/stats'&&method==='GET')return send(await db.features.stats(me.id));
           if(p==='/api/settings'&&['GET','PUT'].includes(method))return send(await db.features.settings(me,method==='PUT'?await body(req):undefined));
+          if(p==='/api/campaigns'&&method==='GET')return send(await db.campaigns.list(me));
+          if(p==='/api/campaigns'&&method==='POST')return send(await db.campaigns.create(me,await body(req)),201);
+          if(p==='/api/campaigns/entries'&&method==='GET')return send(await db.campaigns.entries(me,url.searchParams));
+          const campaignEntry=p.match(/^\/api\/campaigns\/entries\/([^/]+)$/);
+          if(campaignEntry&&method==='PUT')return send(await db.campaigns.updateEntry(me,campaignEntry[1],await body(req)));
+          const campaignQr=p.match(/^\/api\/campaigns\/([^/]+)\/qr$/);
+          if(campaignQr&&method==='GET'){
+            const host=String(req.headers.host||'').replace(/[^a-zA-Z0-9.:-]/g,'');
+            if(!host)fail(400,'No se pudo construir el enlace de campaña.');
+            const listed=await db.campaigns.list(me),campaign=listed.campaigns.find(c=>c.id===campaignQr[1]);
+            if(!campaign)fail(404,'Campaña no disponible.');
+            const protocol=process.env.NODE_ENV==='production'?'https':'http';
+            const result=await db.campaigns.qr(me,campaign.id,`${protocol}://${host}/campaign.html?token=${campaign.token}`);
+            res.writeHead(200,{'Content-Type':'image/svg+xml','Content-Disposition':`attachment; filename="campana-${campaign.id}.svg"`,'Cache-Control':'private, no-store'});
+            return res.end(result.svg);
+          }
+          const campaignRoute=p.match(/^\/api\/campaigns\/([^/]+)$/);
+          if(campaignRoute&&method==='PUT')return send(await db.campaigns.update(me,campaignRoute[1],await body(req)));
           if(p==='/api/communities'&&method==='GET')return send(await db.features.communities(me));
           if(p==='/api/communities'&&method==='POST')return send(await db.features.requestCommunity(me,await body(req)),201);
           if(p==='/api/dashboard'&&['GET','PUT'].includes(method))return send(await db.features.dashboard(me,method==='PUT'?await body(req):undefined,url.searchParams));

@@ -39,6 +39,7 @@
     "mqtt": "^5.10.0",
     "openai": "^6.0.0",
     "puppeteer": "^24.0.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.1",
@@ -48,6 +49,7 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
     "prettier": "3.6.2",
     "prisma": "6.19.0",
     "tsx": "^4.19.2",

@@ -13,7 +13,7 @@ const native = !!window.Capacitor?.isNativePlatform?.();
 function scopedRoute(route) {
   if (
     !state.selectedCommunity ||
-    !/^\/(members(?:[/?]|$)|me(?:\?|$)|stats(?:\?|$)|settings(?:\?|$)|dashboard(?:\?|$)|fields(?:\?|$)|registration(?:\?|$)|superapp(?:\?|$))/.test(
+    !/^\/(members(?:[/?]|$)|campaigns(?:[/?]|$)|me(?:\?|$)|stats(?:\?|$)|settings(?:\?|$)|dashboard(?:\?|$)|fields(?:\?|$)|registration(?:\?|$)|superapp(?:\?|$))/.test(
       route,
     )
   )
@@ -234,6 +234,13 @@ function render() {
   };
   $('#app').innerHTML =
     `${navigator.onLine ? '' : '<div class="offline">Sin conexión. La información y los cambios requieren conexión con el servidor.</div>'}<div class="layout"><aside>${brand()}<nav class="nav">${state.paged ? '<button data-nav="communities">◉ &nbsp; Subregiones</button>' + ((!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('access') ? '<button data-nav="access">⚙ &nbsp; Acceso y foto</button>' : '') : ''}${!state.settings?.superuser || state.selectedCommunity ? '<button data-nav="tree">♧ &nbsp; Mi red</button>' : ''}${state.paged && (!state.settings?.superuser || state.selectedCommunity) && moduleEnabled('dashboard') ? '<button data-nav="dashboard">▥ &nbsp; Dashboard</button>' : ''}${(!state.settings?.superuser || state.selectedCommunity) && me.role === 'ROOT' && moduleEnabled('form') ? '<button data-nav="fields">▤ &nbsp; Formulario</button>' : ''}${state.settings?.superuser && state.selectedCommunity ? '<button id="createSelectedCommunity">＋ Crear subregión</button>' : ''}${state.settings?.superuser ? '<button data-nav="birthdays">▣ &nbsp; Tarjetas de cumpleaños</button><button data-nav="terms">▤ &nbsp; Términos y condiciones</button>' : ''}<button id="install" class="install">↓ &nbsp; Instalar aplicación</button></nav><div class="sidebar-bottom"><span class="campaign-slogan">Por Antioquia<br><em>¡Lo que sea!</em></span><button id="logout">Cerrar sesión</button></div></aside><main class="main"><header class="topbar"><span><b>${state.settings?.superuser ? (state.selectedCommunity ? 'Subregión seleccionada' : 'Administración central') : 'Mi subregión'}</b></span><button class="account ghost" id="myProfile">${avatar(me)}<span>${state.settings?.superuser ? 'José Ignacio Cano' : esc(me.name)}<br><small class="muted">${state.settings?.superuser ? 'Superadministrador' : me.role === 'ROOT' ? 'Administrador raíz' : 'Aliado'}</small></span></button><button class="mobile-logout ghost" id="logoutMobile" type="button">Cerrar sesión</button></header>${['dashboard', 'communities', 'access', 'terms', 'birthdays'].includes(state.view) ? '<div id="featurePage"></div>' : state.view === 'superapp' ? '<div id="corePage"></div>' : state.view === 'fields' ? '<div id="fieldsPage"></div>' : `<section class="hero"><div><div class="eyebrow">Personas que conectan</div><h1>${state.selectedCommunity ? esc(state.org.name) : 'Tu red empieza contigo.'}</h1><p>${state.selectedCommunity ? 'Administra los aliados, permisos, formulario y dashboard de esta subregión.' : 'Visualiza tu subregión, acompaña a cada persona y sigue creciendo.'}</p></div><button class="primary" id="addMember">＋ Registrar aliado</button></section><section class="stats"><div class="stat"><span>ALIADOS EN TU RED</span><b>${metrics.total}</b><span>Incluye tu cuenta</span></div><div class="stat"><span>ALIADOS DIRECTOS</span><b>${metrics.direct}</b><span>Conectados contigo</span></div><div class="stat"><span>NIVELES DE TU RED</span><b>${metrics.levels}</b><span>Debajo de tu cuenta</span></div><div class="stat"><span>CUENTAS ACTIVAS</span><b>${metrics.active}</b><span>Aliados activos</span></div></section><div class="toolbar"><div class="tabs"><button data-view="tree" class="${state.view === 'tree' ? 'active' : ''}">♧ Árbol de aliados</button><button data-view="list" class="${state.view === 'list' ? 'active' : ''}">☷ Directorio</button></div><div class="search-box"><span aria-hidden="true">⌕</span><input id="search" class="search" type="search" aria-label="Buscar aliados" autocomplete="off" placeholder="Buscar por cualquier dato del aliado…" value="${esc(state.query)}"><button id="clearSearch" type="button" aria-label="Limpiar búsqueda" ${state.query ? '' : 'hidden'}>×</button></div></div><section class="board"><div class="board-title"><div><b>${state.view === 'tree' ? 'Así se conecta tu subregión' : 'Directorio de aliados'}</b><div class="muted">${me.role === 'ROOT' ? 'Vista completa de tu organización' : 'Tu cuenta y todos tus descendientes'}</div></div><button id="export" class="ghost">↓ CSV</button></div><div id="network"></div></section><p class="footnote">${state.selectedCommunity ? 'Selecciona una persona para administrar su ficha. Vuelve a Subregiones para elegir otra red.' : 'Selecciona una persona para ver su ficha o registrar un aliado debajo de ella. No hay un límite de cuentas configurado.'}</p>`}</main></div>`;
+  if (me.role === 'ROOT' && (!state.settings?.superuser || state.selectedCommunity)) {
+    $('.nav').innerHTML += '<button data-nav="campaigns">⌁ &nbsp; Campañas</button>';
+  }
+  if (state.view === 'campaigns') {
+    $('.main').querySelectorAll(':scope > :not(.topbar)').forEach((element) => element.remove());
+    $('.main').insertAdjacentHTML('beforeend', '<div id="featurePage"></div>');
+  }
   platformLogos();
   document.querySelectorAll('[data-nav]').forEach(
     (b) =>
@@ -268,6 +275,7 @@ function render() {
   else if (state.view === 'dashboard') renderDashboard();
   else if (state.view === 'communities') renderCommunities();
   else if (state.view === 'access') renderAccess();
+  else if (state.view === 'campaigns') renderCampaigns();
   else if (state.view === 'superapp') renderCore();
   else if (state.view === 'fields') renderFields();
   else {
@@ -581,6 +589,7 @@ async function exportCSV() {
     fields = state.org.fields,
     membersRoute = scopedRoute('/members');
   let exportMembers = state.members;
+  let campaignRecords = [];
   if (state.paged) {
     const button = $('#export');
     button.disabled = true;
@@ -601,6 +610,17 @@ async function exportCSV() {
       button.textContent = '↓ CSV';
     }
   }
+  if (state.user?.role === 'ROOT') {
+    try {
+      let cursor = null;
+      do {
+        const page = await api('/campaigns/entries?limit=100' + (cursor ? '&after=' + cursor : ''));
+        campaignRecords.push(...page.entries);
+        cursor = page.nextCursor;
+      } while (cursor);
+    }
+    catch (error) { toast('No se pudieron incluir las campañas: ' + error.message); return; }
+  }
   const cell = (v) =>
     '"' +
     String(v ?? '')
@@ -616,6 +636,14 @@ async function exportCSV() {
       exportMembers.find((p) => p.id === m.parentId)?.name || '',
       m.status,
       ...fields.map((f) => m.data[f.id]),
+    ]),
+    ...campaignRecords.map((entry) => [
+      communityName,
+      entry.name,
+      entry.email,
+      entry.campaign.name,
+      'Registro de campaña',
+      ...fields.map((f) => entry.data[f.id]),
     ]),
   ];
   const url = URL.createObjectURL(
