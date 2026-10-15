@@ -245,6 +245,9 @@ test('campaign management is isolated in a root-only navigation module', () => {
   assert.match(app, /data-nav="campaigns"/);
   assert.match(campaigns, /Descargar QR vectorial/);
   assert.match(campaigns, /Recibir nuevos registros/);
+  assert.match(campaigns, /Directorio de registros/);
+  assert.match(campaigns, /backToCampaigns/);
+  assert.doesNotMatch(campaigns, /modal\('Registros/);
   assert.match(publicPage, /Información enviada/);
 });
 

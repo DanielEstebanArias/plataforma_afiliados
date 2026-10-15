@@ -87,17 +87,23 @@ export class AffiliateCampaigns {
       this.root(me);
       const campaignId = params.get('campaignId') || undefined;
       const after = params.get('after') || undefined;
+      const query = (params.get('q') || '').trim().slice(0, 120);
       const limit = Number(params.get('limit') || 100);
       if (campaignId) uuid(campaignId);
       if (after) uuid(after);
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) fail(400, 'Tamaño de página inválido.');
-      const where = { tenantId: n.tenantId, networkId: n.id, ...(campaignId ? { campaignId } : {}), ...(after ? { id: { gt: after } } : {}) };
-      const entries = await tx.affiliateCampaignEntry.findMany({
+      const baseWhere: any = { tenantId: n.tenantId, networkId: n.id, ...(campaignId ? { campaignId } : {}),
+        ...(query ? { OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ] } : {}) };
+      const where = { ...baseWhere, ...(after ? { id: { gt: after } } : {}) };
+      const [entries, total] = await Promise.all([tx.affiliateCampaignEntry.findMany({
         where,
         include: { campaign: { select: { id: true, name: true } } },
         orderBy: { id: 'asc' }, take: limit + 1,
-      });
-      return { entries: entries.slice(0, limit), nextCursor: entries.length > limit ? entries[limit - 1].id : null };
+      }), tx.affiliateCampaignEntry.count({ where: baseWhere })]);
+      return { entries: entries.slice(0, limit), total, nextCursor: entries.length > limit ? entries[limit - 1].id : null };
     });
   }
   async updateEntry(me: any, id: string, input: any) {
