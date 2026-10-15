@@ -2,6 +2,17 @@
 
 Esta entrega prepara el módulo de Afiliados integrado con los modelos de SuperApp. No inicia los otros módulos de IA, pagos o GIS. Mantiene las fotos en PostgreSQL; no requiere discos persistentes en el backend. La instalación local sigue iniciándose con `npm run affiliates`.
 
+## Correo transaccional opcional
+
+La recuperación de contraseñas y los envíos de cumpleaños quedan inactivos hasta configurar estas variables en Railway:
+
+- `RESEND_API_KEY`: clave privada de Resend.
+- `RESEND_FROM_EMAIL`: remitente perteneciente a un dominio verificado en Resend.
+- `PUBLIC_APP_URL`: URL HTTPS pública de la plataforma, sin parámetros.
+- `BIRTHDAY_FROM_EMAIL`: remitente de cumpleaños; puede coincidir con `RESEND_FROM_EMAIL`.
+
+La clave nunca debe almacenarse en el repositorio ni enviarse al navegador. Después de agregar las variables y reiniciar el servicio, la recuperación envía enlaces de un solo uso con vencimiento de 30 minutos.
+
 ## Distribución
 
 Un solo proyecto Railway con dos servicios, en la misma región:

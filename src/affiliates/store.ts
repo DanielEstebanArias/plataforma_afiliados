@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { NetworkFeatures } from './features';
 import { AffiliateTerms } from './terms';
 import { AffiliateCampaigns } from './campaigns';
+import { AffiliatePasswordRecovery } from './password-recovery';
 
 type Field = { id: string; label: string; type: string; required: boolean; options?: string[] };
 export const column = (id: string) =>
@@ -90,6 +91,7 @@ export class AffiliatesStore {
   readonly features = new NetworkFeatures(this);
   readonly terms = new AffiliateTerms(this);
   readonly campaigns = new AffiliateCampaigns(this);
+  readonly passwordRecovery = new AffiliatePasswordRecovery(this);
   async visible(viewer: string, target: string) {
     return memberRow(await this.features.visible(viewer, target));
   }

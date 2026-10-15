@@ -36,6 +36,8 @@ function main(){
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610140001_member_login_override/migration.sql','utf8')+'\nCOMMIT;');
  if(!sql(`SELECT to_regclass('public."AffiliateCampaign"');`))
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610150001_campaigns/migration.sql','utf8')+'\nCOMMIT;');
+ if(!sql(`SELECT to_regclass('public."AffiliatePasswordReset"');`))
+  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610150002_password_recovery/migration.sql','utf8')+'\nCOMMIT;');
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;
