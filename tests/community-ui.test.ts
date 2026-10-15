@@ -108,7 +108,8 @@ test('selected community exposes every admin module and scopes all data requests
   const html = elements.get('#app').innerHTML;
   for (const module of ['access', 'dashboard', 'fields', 'tree'])
     assert.ok(html.includes(`data-nav="${module}"`));
-  assert.ok(html.includes('createSelectedCommunity'));
+  assert.ok(html.includes('data-nav="campaigns"'));
+  assert.ok(!html.includes('createSelectedCommunity'));
   for (const route of [
     '/settings',
     '/dashboard?status=active',
@@ -245,4 +246,21 @@ test('campaign management is isolated in a root-only navigation module', () => {
   assert.match(campaigns, /Descargar QR vectorial/);
   assert.match(campaigns, /Recibir nuevos registros/);
   assert.match(publicPage, /Información enviada/);
+});
+
+test('superadministrator sees campaigns inside a selected community without duplicate creation action', () => {
+  const { context, elements } = appContext();
+  vm.runInContext(
+    `
+    state = { paged: true, selectedCommunity: 'selected', view: 'communities', query: '', members: [],
+      user: { id: 'admin', name: 'Admin', role: 'ROOT' }, org: { name: 'Selected community', fields: [] },
+      settings: { superuser: true, modules: { access: true, dashboard: true, form: true } } };
+    renderCommunities = () => {};
+    render();
+  `,
+    context,
+  );
+  const html = elements.get('#app').innerHTML;
+  assert.ok(html.includes('data-nav="campaigns"'));
+  assert.ok(!html.includes('createSelectedCommunity'));
 });
