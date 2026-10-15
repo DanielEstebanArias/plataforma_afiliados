@@ -1,14 +1,30 @@
+let campaignDirectoryRequest = 0;
 async function campaignEntries(campaign, cursor = null, history = [null], query = '') {
-  const host = $('#featurePage'); host.innerHTML = '<p>Cargando registros…</p>';
+  const host = $('#featurePage');
+  if (host.dataset.campaignDirectory !== campaign.id) {
+    host.dataset.campaignDirectory = campaign.id;
+    host.innerHTML = `<section class="hero campaign-directory-hero"><div><button class="button-link" id="backToCampaigns">← Volver a campañas</button><div class="eyebrow">Registros de campaña</div><h1>${esc(campaign.name)}</h1><p>Completa aquí los campos que no se solicitaron en el formulario público.</p></div></section><div class="toolbar campaign-directory-toolbar"><div><b>Directorio de registros</b><div class="muted" id="campaignSearchStatus">Buscando registros…</div></div><div class="search-box"><span aria-hidden="true">⌕</span><input id="campaignSearch" class="search" type="search" autocomplete="off" placeholder="Buscar por nombre o correo…"><button id="clearCampaignSearch" type="button" aria-label="Limpiar búsqueda" hidden>×</button></div></div><section class="board campaign-directory" id="campaignDirectoryResults"><div class="empty">Cargando registros…</div></section>`;
+    $('#backToCampaigns').onclick = () => renderCampaigns();
+    let timer;
+    $('#campaignSearch').oninput = (event) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => campaignEntries(campaign, null, [null], event.target.value.trim()), 180);
+    };
+    $('#clearCampaignSearch').onclick = () => { $('#campaignSearch').value = ''; campaignEntries(campaign); };
+  }
+  const resultsHost = $('#campaignDirectoryResults'), request = ++campaignDirectoryRequest;
+  resultsHost.classList.add('directory-searching');
+  resultsHost.setAttribute('aria-busy', 'true');
   const result = await api('/campaigns/entries?limit=50&campaignId=' + encodeURIComponent(campaign.id) + (cursor ? '&after=' + cursor : '') + (query ? '&q=' + encodeURIComponent(query) : ''));
+  if (request !== campaignDirectoryRequest || host.dataset.campaignDirectory !== campaign.id) return;
   const rows = result.entries;
-  host.innerHTML = `<section class="hero campaign-directory-hero"><div><button class="button-link" id="backToCampaigns">← Volver a campañas</button><div class="eyebrow">Registros de campaña</div><h1>${esc(campaign.name)}</h1><p>Completa aquí los campos que no se solicitaron en el formulario público.</p></div></section><div class="toolbar campaign-directory-toolbar"><div><b>Directorio de registros</b><div class="muted">${result.total.toLocaleString('es-CO')} coincidencias · hasta 50 por página</div></div><div class="search-box"><span aria-hidden="true">⌕</span><input id="campaignSearch" class="search" type="search" autocomplete="off" placeholder="Buscar por nombre o correo…" value="${esc(query)}"><button id="clearCampaignSearch" type="button" aria-label="Limpiar búsqueda" ${query ? '' : 'hidden'}>×</button></div></div><section class="board campaign-directory"><div class="table-wrap campaign-entry-table"><table><thead><tr><th>Aliado</th><th>Correo</th><th>Fecha de registro</th><th></th></tr></thead><tbody>${rows.map((entry) => `<tr><td><div class="campaign-person"><span class="avatar">${esc((entry.name || entry.data.firstNames || '?').trim().charAt(0).toUpperCase() || '?')}</span><b>${esc(entry.name || entry.data.firstNames || 'Sin completar')}</b></div></td><td>${esc(entry.email || 'Sin completar')}</td><td>${new Date(entry.createdAt).toLocaleDateString('es-CO')}</td><td><button type="button" data-edit-campaign-entry="${entry.id}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>${rows.length ? '' : '<div class="empty">No hay registros que coincidan con la búsqueda.</div>'}<div class="pagination"><button type="button" id="previousCampaignEntries" ${history.length === 1 ? 'disabled' : ''}>← Anterior</button><span>Página ${history.length}</span><button type="button" id="nextCampaignEntries" ${result.nextCursor ? '' : 'disabled'}>Siguiente →</button></div></section>`;
-  $('#backToCampaigns').onclick = () => renderCampaigns();
+  $('#campaignSearchStatus').textContent = `${result.total.toLocaleString('es-CO')} coincidencias · hasta 50 por página`;
+  resultsHost.innerHTML = `<div class="table-wrap campaign-entry-table"><table><thead><tr><th>Aliado</th><th>Correo</th><th>Fecha de registro</th><th></th></tr></thead><tbody>${rows.map((entry) => `<tr><td><div class="campaign-person"><span class="avatar">${esc((entry.name || entry.data.firstNames || '?').trim().charAt(0).toUpperCase() || '?')}</span><b>${esc(entry.name || entry.data.firstNames || 'Sin completar')}</b></div></td><td>${esc(entry.email || 'Sin completar')}</td><td>${new Date(entry.createdAt).toLocaleDateString('es-CO')}</td><td><button type="button" data-edit-campaign-entry="${entry.id}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>${rows.length ? '' : '<div class="empty">No hay registros que coincidan con la búsqueda.</div>'}<div class="pagination"><button type="button" id="previousCampaignEntries" ${history.length === 1 ? 'disabled' : ''}>← Anterior</button><span>Página ${history.length}</span><button type="button" id="nextCampaignEntries" ${result.nextCursor ? '' : 'disabled'}>Siguiente →</button></div>`;
+  resultsHost.classList.remove('directory-searching');
+  resultsHost.removeAttribute('aria-busy');
   document.querySelectorAll('[data-edit-campaign-entry]').forEach((button) => button.onclick = () => editCampaignEntry(rows.find((entry) => entry.id === button.dataset.editCampaignEntry), campaign));
   $('#previousCampaignEntries').onclick = () => { const previous = history.slice(0, -1); campaignEntries(campaign, previous.at(-1), previous, query); };
   $('#nextCampaignEntries').onclick = () => campaignEntries(campaign, result.nextCursor, [...history, result.nextCursor], query);
-  let timer; $('#campaignSearch').oninput = (event) => { clearTimeout(timer); timer = setTimeout(() => campaignEntries(campaign, null, [null], event.target.value.trim()), 250); };
-  $('#clearCampaignSearch').onclick = () => campaignEntries(campaign);
 }
 function editCampaignEntry(entry, campaign) {
   const splitNames = state.org.fields.some((field) => field.id === 'firstNames') && state.org.fields.some((field) => field.id === 'lastNames');

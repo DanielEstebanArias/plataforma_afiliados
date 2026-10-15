@@ -816,5 +816,5 @@ a {
   }
 }
 .municipality-picker{position:relative}.municipality-options{position:absolute;z-index:20;top:100%;left:0;right:0;max-height:16rem;overflow:auto;background:#fff;border:1px solid #cbd5d1;border-radius:10px;box-shadow:0 12px 30px #073d3426}.municipality-options:empty,.municipality-options[hidden]{display:none}.municipality-options button{display:block;width:100%;padding:.7rem .85rem;border:0;border-bottom:1px solid #e8eeeb;border-radius:0;background:#fff;text-align:left;color:#17352f}.municipality-options button:hover,.municipality-options button:focus{background:#eaf6df;color:#073d34}
-#clearSearch { display: none !important; }
+#clearSearch, #clearCampaignSearch { display: none !important; }
 .recovery-link{display:block;width:100%;margin-top:10px;text-align:center;border:0;background:transparent;color:#174b3d}.success{padding:18px;border-radius:12px;background:#edf5ef;color:#174b3d}.success b{font-size:18px}

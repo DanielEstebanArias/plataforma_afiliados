@@ -218,9 +218,19 @@ test('directory search keeps existing results mounted while the next match page 
 });
 test('directory search shows only the native clear control', () => {
   const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  const campaigns = fs.readFileSync('affiliates/web/campaign-admin.js', 'utf8');
   const style = fs.readFileSync('affiliates/web/style.css', 'utf8');
   assert.ok(app.includes('id="clearSearch"'));
-  assert.ok(style.includes('#clearSearch { display: none !important; }'));
+  assert.ok(campaigns.includes('id="clearCampaignSearch"'));
+  assert.ok(style.includes('#clearSearch, #clearCampaignSearch { display: none !important; }'));
+});
+
+test('campaign search keeps its input mounted while results refresh', () => {
+  const campaigns = fs.readFileSync('affiliates/web/campaign-admin.js', 'utf8');
+  assert.match(campaigns, /host\.dataset\.campaignDirectory !== campaign\.id/);
+  assert.match(campaigns, /resultsHost\.innerHTML/);
+  assert.match(campaigns, /request !== campaignDirectoryRequest/);
+  assert.match(campaigns, /setTimeout\(\(\) => campaignEntries[\s\S]*180\)/);
 });
 
 test('member form preserves the dedicated birth date instead of overwriting it', () => {
