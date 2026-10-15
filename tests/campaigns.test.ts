@@ -47,3 +47,21 @@ test('public submission is stored in its campaign and disabled campaigns reject 
   campaign.enabled = false;
   await assert.rejects(campaigns.submit('stable-token-123456789012345', { data: { firstNames: 'Ana' } }), { status: 410 });
 });
+
+test('campaign directory supports paginated name or email search with a total', async () => {
+  let receivedWhere: any;
+  const tx = { affiliateCampaignEntry: {
+    findMany: async ({ where }: any) => (receivedWhere = where, []),
+    count: async () => 7,
+  } };
+  const campaigns = new AffiliateCampaigns({ tx: async (fn: any) => fn(tx, network) } as any);
+  const result = await campaigns.entries(
+    { id: 'root', role: 'ROOT' },
+    new URLSearchParams({ campaignId: '33333333-3333-4333-8333-333333333333', q: 'ana', limit: '50' }),
+  );
+  assert.equal(result.total, 7);
+  assert.deepEqual(receivedWhere.OR, [
+    { name: { contains: 'ana', mode: 'insensitive' } },
+    { email: { contains: 'ana', mode: 'insensitive' } },
+  ]);
+});
