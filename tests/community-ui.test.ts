@@ -235,3 +235,14 @@ test('mobile layout exposes a functional logout action', () => {
   assert.match(app, /\$\('#logoutMobile'\).*logout/);
   assert.match(style, /@media \(max-width: 700px\)[\s\S]*\.mobile-logout \{[\s\S]*display: block;/);
 });
+
+test('campaign management is isolated in a root-only navigation module', () => {
+  const app = fs.readFileSync('affiliates/web/app.js', 'utf8');
+  const campaigns = fs.readFileSync('affiliates/web/campaign-admin.js', 'utf8');
+  const publicPage = fs.readFileSync('affiliates/web/campaign.js', 'utf8');
+  assert.match(app, /me\.role === 'ROOT'/);
+  assert.match(app, /data-nav="campaigns"/);
+  assert.match(campaigns, /Descargar QR vectorial/);
+  assert.match(campaigns, /Recibir nuevos registros/);
+  assert.match(publicPage, /Información enviada/);
+});

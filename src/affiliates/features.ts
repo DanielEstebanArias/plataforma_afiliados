@@ -159,7 +159,11 @@ export class NetworkFeatures {
         });
         // Include stored values from fields removed from a community's current form.
         const savedKeys = await tx.$queryRaw<{ networkId: string; key: string }[]>`
-        SELECT DISTINCT "networkId", jsonb_object_keys(data) AS key FROM "AffiliateMember" WHERE "tenantId"=${n.tenantId}::uuid`;
+        SELECT DISTINCT "networkId", jsonb_object_keys(data) AS key FROM (
+          SELECT "networkId",data FROM "AffiliateMember" WHERE "tenantId"=${n.tenantId}::uuid
+          UNION ALL
+          SELECT "networkId",data FROM "AffiliateCampaignEntry" WHERE "tenantId"=${n.tenantId}::uuid
+        ) saved`;
         const savedKeysByNetwork = new Map<string, string[]>();
         for (const row of savedKeys) {
           const keys = savedKeysByNetwork.get(row.networkId) ?? [];
@@ -250,6 +254,23 @@ export class NetworkFeatures {
             );
             records += members.length;
             cursor = members.at(-1)!.id;
+          }
+          let entryCursor: string | undefined;
+          while (true) {
+            const entries = await tx.affiliateCampaignEntry.findMany({
+              where: { tenantId: n.tenantId, networkId: network.id, ...(entryCursor ? { id: { gt: entryCursor } } : {}) },
+              include: { campaign: { select: { id: true, name: true } } },
+              orderBy: { id: 'asc' }, take: 1000,
+            });
+            if (!entries.length) break;
+            await write(entries.map((entry) => csvLine([
+              network.name, network.id, entry.id, entry.name, entry.email,
+              entry.campaign.id, entry.campaign.name, 'CAMPAÑA', 'Registro de campaña',
+              entry.createdAt.toISOString(), 'No',
+              ...columns.map((_, index) => mapping.has(index) ? ((entry.data as any)[mapping.get(index)!] ?? '') : ''),
+            ])).join(''));
+            records += entries.length;
+            entryCursor = entries.at(-1)!.id;
           }
         }
         await this.audit(tx, me.id, 'communities.exported', n.id, {

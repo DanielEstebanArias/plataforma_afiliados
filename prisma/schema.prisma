@@ -100,8 +100,41 @@ model AffiliateNetwork {
   photoMime String?
   app App @relation(fields: [tenantId, appId], references: [tenantId, id], onDelete: Cascade)
   members AffiliateMember[]
+  campaigns AffiliateCampaign[]
   @@unique([tenantId, appId])
   @@unique([tenantId, id])
+}
+
+model AffiliateCampaign {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  networkId String @db.Uuid
+  token String @unique
+  name String
+  fieldIds Json
+  enabled Boolean @default(true)
+  createdBy String @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  network AffiliateNetwork @relation(fields: [tenantId, networkId], references: [tenantId, id], onDelete: Cascade)
+  entries AffiliateCampaignEntry[]
+  @@unique([tenantId, networkId, id])
+  @@index([tenantId, networkId, createdAt])
+}
+
+model AffiliateCampaignEntry {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  networkId String @db.Uuid
+  campaignId String @db.Uuid
+  name String @default("")
+  email String @default("")
+  data Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  campaign AffiliateCampaign @relation(fields: [tenantId, networkId, campaignId], references: [tenantId, networkId, id], onDelete: Cascade)
+  @@unique([tenantId, networkId, id])
+  @@index([tenantId, networkId, campaignId, createdAt])
 }
 
 model AffiliateMember {
