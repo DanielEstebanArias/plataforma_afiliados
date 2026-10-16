@@ -1,6 +1,7 @@
 // Explicit administrator operation, never called by the application startup.
 const {spawnSync}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path');
+const {randomBytes,scryptSync}=require('node:crypto');
 function sql(input){
  const url=new URL(process.env.DATABASE_OWNER_URL);
  url.searchParams.delete('schema');
@@ -57,6 +58,16 @@ function main(){
  WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL
  ON CONFLICT("tenantId") DO NOTHING;
  COMMIT;`);
+ const platformPassword=process.env.PLATFORM_ADMIN_PASSWORD;
+ if(platformPassword){
+  if(platformPassword.length<10||platformPassword.length>200)throw new Error('PLATFORM_ADMIN_PASSWORD debe tener entre 10 y 200 caracteres.');
+  const salt=randomBytes(16).toString('hex');
+  const passwordHash=(salt+':'+scryptSync(platformPassword,salt,64).toString('hex')).replaceAll("'","''");
+  sql(`UPDATE "PlatformAdministrator" SET password='${passwordHash}' WHERE email=(
+   SELECT lower(m.email) FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
+   WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL LIMIT 1
+  );`);
+ }
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;
