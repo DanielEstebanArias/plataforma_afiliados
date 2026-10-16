@@ -26,7 +26,7 @@ export class TenantContextManager implements OnModuleInit, OnModuleDestroy {
       {
         tablename: string;
       }[]
-    >`SELECT c.relname AS tablename FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'_prisma_migrations' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid=c.oid AND d.deptype='e') AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity)`;
+    >`SELECT c.relname AS tablename FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'_prisma_migrations' AND c.relname NOT IN ('PlatformAdministrator','PlatformAdminSession','PlatformAuditLog','PlatformDirectory') AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid=c.oid AND d.deptype='e') AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity)`;
     if (unsafe.length) throw new Error('RLS missing: ' + unsafe.map((x) => x.tablename).join(','));
   }
   async onModuleDestroy() {

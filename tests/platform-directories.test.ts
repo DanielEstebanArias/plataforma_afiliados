@@ -14,6 +14,12 @@ test('platform directory schema isolates global administration from tenant data'
   assert.doesNotMatch(migration, /ENABLE ROW LEVEL SECURITY[^;]*PlatformDirectory/);
 });
 
+test('global control tables are excluded from tenant RLS validation only', () => {
+  const manager = fs.readFileSync('src/security/tenant-context.manager.ts', 'utf8');
+  assert.match(manager, /PlatformAdministrator.*PlatformAdminSession.*PlatformAuditLog.*PlatformDirectory/);
+  assert.match(manager, /NOT c\.relrowsecurity OR NOT c\.relforcerowsecurity/);
+});
+
 test('global administrator can manage directories only through protected routes', () => {
   const service = fs.readFileSync('src/affiliates/platform-directories.ts', 'utf8');
   assert.match(service, /platform_session/);
