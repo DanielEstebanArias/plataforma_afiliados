@@ -6,7 +6,10 @@ function sql(input){
  const url=new URL(process.env.DATABASE_OWNER_URL);
  url.searchParams.delete('schema');
  const r=spawnSync(process.env.PSQL_BIN||'psql',['-X','-w','-q','-v','ON_ERROR_STOP=1','-tA','-d',url.href],{input,encoding:'utf8',env:{...process.env,PGCONNECT_TIMEOUT:'15'},windowsHide:true,timeout:60000});
- if(r.status!==0)throw new Error('Falló PostgreSQL. Revisa acceso del propietario y psql. No se imprimen credenciales.');
+ if(r.status!==0){
+  const detail=String(r.stderr||'').split(/\r?\n/).filter(line=>line&&!/postgres(?:ql)?:\/\/|password/i.test(line)).slice(-3).join(' | ');
+  throw new Error('Falló PostgreSQL: '+(detail||'revisa acceso del propietario y psql.'));
+ }
  return r.stdout.trim();
 }
 function main(){
