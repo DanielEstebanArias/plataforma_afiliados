@@ -15,6 +15,9 @@ function sql(input){
 function main(){
  if(!process.env.DATABASE_OWNER_URL||!process.env.RUNTIME_DB_PASSWORD||process.env.RUNTIME_DB_PASSWORD.length<24)throw new Error('Configura DATABASE_OWNER_URL y RUNTIME_DB_PASSWORD (mínimo 24 caracteres).');
  const password=process.env.RUNTIME_DB_PASSWORD.replaceAll("'","''");
+ const platformEmail=(process.env.PLATFORM_ADMIN_EMAIL||'arias.esteban@outlook.com').trim().toLowerCase();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(platformEmail))throw new Error('PLATFORM_ADMIN_EMAIL no es válido.');
+ const permanentPlatformEmail=platformEmail.replaceAll("'","''");
  const existing=sql("SELECT 1 FROM pg_roles WHERE rolname='superapp_runtime';");
  if(!existing)sql(`CREATE ROLE superapp_runtime LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${password}';`);
  sql('ALTER ROLE superapp_runtime NOSUPERUSER NOBYPASSRLS;');
@@ -52,26 +55,23 @@ function main(){
  sql(`BEGIN;
  SELECT set_config('app.tenant_id','${tenantId}',true);
  INSERT INTO "PlatformAdministrator"(id,name,email,password,status)
- SELECT m.id,m.name,lower(m.email),m.password,'ACTIVE'
+ SELECT m.id,m.name,'${permanentPlatformEmail}',m.password,'ACTIVE'
  FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
  WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,password=excluded.password,status='ACTIVE';
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,status='ACTIVE';
  INSERT INTO "PlatformDirectory"(id,"tenantId","rootAppId",name,slogan,"divisionLabel","directoryAdminName","directoryAdminEmail",status,"createdBy")
  SELECT '${tenantId}'::uuid,'${tenantId}'::uuid,'${appId}'::uuid,'Directorio de Antioquia','Por Antioquia ¡Lo que sea!','Subregiones','José Ignacio Cano',lower(m.email),'ACTIVE',a.id
  FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
- JOIN "PlatformAdministrator" a ON a.email=lower(m.email)
+ JOIN "PlatformAdministrator" a ON a.id=m.id
  WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL
  ON CONFLICT("tenantId") DO NOTHING;
  COMMIT;`);
  const platformPassword=process.env.PLATFORM_ADMIN_PASSWORD;
- if(platformPassword){
-  if(platformPassword.length<10||platformPassword.length>200)throw new Error('PLATFORM_ADMIN_PASSWORD debe tener entre 10 y 200 caracteres.');
+ if(!platformPassword||platformPassword.length<10||platformPassword.length>200)throw new Error('Configura PLATFORM_ADMIN_PASSWORD con entre 10 y 200 caracteres.');
+ {
   const salt=randomBytes(16).toString('hex');
   const passwordHash=(salt+':'+scryptSync(platformPassword,salt,64).toString('hex')).replaceAll("'","''");
-  sql(`UPDATE "PlatformAdministrator" SET password='${passwordHash}' WHERE email=(
-   SELECT lower(m.email) FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
-   WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL LIMIT 1
-  );`);
+  sql(`UPDATE "PlatformAdministrator" SET password='${passwordHash}',status='ACTIVE' WHERE email='${permanentPlatformEmail}';`);
  }
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;

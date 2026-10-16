@@ -44,6 +44,7 @@ test('directory UI exposes configurable division labels and destructive confirma
   assert.match(ui, /Administrar directorio/);
   assert.match(ui, /editDirectory/);
   assert.match(ui, /Nueva contraseña, opcional/);
+  assert.doesNotMatch(ui, /Volver al directorio/);
   assert.match(ui, /name="primaryColor"/);
   assert.match(ui, /Copiar enlace/);
   assert.match(ui, /navigator\.share/);
