@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { TenantContextManager } from '../security/tenant-context.manager';
 import { affiliatesHandler, mountAffiliates } from './middleware';
 import { startBirthdayScheduler } from './birthdays';
+import { platformDirectoriesHandler } from './platform-directories';
 @Module({ providers: [TenantContextManager] })
 class ProductionAffiliatesModule {}
 export async function startProduction() {
@@ -27,12 +28,9 @@ export async function startProduction() {
     try { await prisma.$queryRaw`SELECT 1`; res.setHeader('Cache-Control','no-store'); res.status(200).json({status:'ok'}); }
     catch { res.status(503).json({status:'unavailable'}); }
   });
+  app.use('/api/platform', platformDirectoriesHandler(prisma, process.env.AFFILIATES_TENANT_ID!, process.env.AFFILIATES_APP_ID!));
   // Resolve the default community under the same tenant restrictions as normal requests.
   const handler = affiliatesHandler(prisma, process.env.AFFILIATES_TENANT_ID!, process.env.AFFILIATES_APP_ID!);
-  await prisma.$transaction(async tx => {
-    await tx.$executeRaw`SELECT set_config('app.tenant_id',${process.env.AFFILIATES_TENANT_ID!},true)`;
-    await tx.affiliateNetwork.findUniqueOrThrow({where:{appId:process.env.AFFILIATES_APP_ID!}});
-  });
   mountAffiliates(app, prisma);
   startBirthdayScheduler(prisma, process.env.AFFILIATES_TENANT_ID);
   app.use(handler);

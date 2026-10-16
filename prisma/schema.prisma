@@ -31,6 +31,59 @@ model Tenant {
   affiliateTerms     AffiliateTermsVersion[]
   birthdayDeliveries AffiliateBirthdayDelivery[]
   passwordResets     AffiliatePasswordReset[]
+  platformDirectory  PlatformDirectory?
+}
+
+model PlatformAdministrator {
+  id        String                 @id @default(uuid()) @db.Uuid
+  name      String
+  email     String                 @unique
+  password  String
+  status    String                 @default("ACTIVE")
+  createdAt DateTime               @default(now())
+  sessions  PlatformAdminSession[]
+  directories PlatformDirectory[]
+}
+
+model PlatformAdminSession {
+  tokenDigest String                @id
+  administratorId String            @db.Uuid
+  csrf        String
+  expiresAt   DateTime
+  administrator PlatformAdministrator @relation(fields: [administratorId], references: [id], onDelete: Cascade)
+
+  @@index([administratorId, expiresAt])
+}
+
+model PlatformAuditLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  administratorId String   @db.Uuid
+  action          String
+  directoryId     String?  @db.Uuid
+  details         Json
+  createdAt       DateTime @default(now())
+
+  @@index([administratorId, createdAt])
+}
+
+model PlatformDirectory {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @unique @db.Uuid
+  rootAppId      String   @db.Uuid
+  name           String
+  slogan         String
+  divisionLabel  String   @default("Subregiones")
+  directoryAdminName String
+  directoryAdminEmail String
+  status         String   @default("ACTIVE")
+  createdBy      String   @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  archivedAt     DateTime?
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator        PlatformAdministrator @relation(fields: [createdBy], references: [id])
+
+  @@index([status, createdAt])
 }
 
 model Membership {
@@ -189,6 +242,7 @@ model AffiliateSession {
   memberId String @db.Uuid
   csrf String
   expires BigInt
+  platformAdminId String? @db.Uuid
   member AffiliateMember @relation(fields: [tenantId, networkId, memberId], references: [tenantId, networkId, id], onDelete: Cascade)
   @@index([tenantId, networkId, memberId])
   @@index([tenantId, networkId, expires])

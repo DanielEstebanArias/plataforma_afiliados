@@ -1,6 +1,7 @@
 // Explicit administrator operation, never called by the application startup.
 const {spawnSync}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path');
+const {randomBytes,scryptSync}=require('node:crypto');
 function sql(input){
  const url=new URL(process.env.DATABASE_OWNER_URL);
  url.searchParams.delete('schema');
@@ -38,6 +39,35 @@ function main(){
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610150001_campaigns/migration.sql','utf8')+'\nCOMMIT;');
  if(!sql(`SELECT to_regclass('public."AffiliatePasswordReset"');`))
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610150002_password_recovery/migration.sql','utf8')+'\nCOMMIT;');
+ if(!sql(`SELECT to_regclass('public."PlatformDirectory"');`))
+  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610160001_platform_directories/migration.sql','utf8')+'\nCOMMIT;');
+ const tenantId=process.env.AFFILIATES_TENANT_ID,appId=process.env.AFFILIATES_APP_ID;
+ if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(tenantId||'')||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(appId||''))
+  throw new Error('Configura AFFILIATES_TENANT_ID y AFFILIATES_APP_ID para registrar el Directorio de Antioquia.');
+ sql(`BEGIN;
+ SELECT set_config('app.tenant_id','${tenantId}',true);
+ INSERT INTO "PlatformAdministrator"(id,name,email,password,status)
+ SELECT m.id,m.name,lower(m.email),m.password,'ACTIVE'
+ FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
+ WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL
+ ON CONFLICT(email) DO UPDATE SET name=excluded.name,password=excluded.password,status='ACTIVE';
+ INSERT INTO "PlatformDirectory"(id,"tenantId","rootAppId",name,slogan,"divisionLabel","directoryAdminName","directoryAdminEmail",status,"createdBy")
+ SELECT '${tenantId}'::uuid,'${tenantId}'::uuid,'${appId}'::uuid,'Directorio de Antioquia','Por Antioquia ¡Lo que sea!','Subregiones','José Ignacio Cano',lower(m.email),'ACTIVE',a.id
+ FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
+ JOIN "PlatformAdministrator" a ON a.email=lower(m.email)
+ WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL
+ ON CONFLICT("tenantId") DO NOTHING;
+ COMMIT;`);
+ const platformPassword=process.env.PLATFORM_ADMIN_PASSWORD;
+ if(platformPassword){
+  if(platformPassword.length<10||platformPassword.length>200)throw new Error('PLATFORM_ADMIN_PASSWORD debe tener entre 10 y 200 caracteres.');
+  const salt=randomBytes(16).toString('hex');
+  const passwordHash=(salt+':'+scryptSync(platformPassword,salt,64).toString('hex')).replaceAll("'","''");
+  sql(`UPDATE "PlatformAdministrator" SET password='${passwordHash}' WHERE email=(
+   SELECT lower(m.email) FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
+   WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL LIMIT 1
+  );`);
+ }
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;
  REVOKE UPDATE,DELETE ON "AuditLog" FROM superapp_runtime;

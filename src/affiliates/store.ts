@@ -73,6 +73,13 @@ const memberRow = (m: any) =>
   };
 /** Compatibility boundary for the existing member API; all production operations use Prisma/RLS. */
 export class AffiliatesStore {
+  async directoryBranding() {
+    const directory = await this.prisma.platformDirectory.findUnique({
+      where: { tenantId: this.tenantId },
+      select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true, status: true },
+    });
+    return directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', status: 'ACTIVE' };
+  }
   async loginCandidates(email: string) {
     return this.tx(async (tx, n) => {
       const members = await tx.affiliateMember.findMany({
@@ -100,12 +107,16 @@ export class AffiliatesStore {
     actor: string;
     appId?: string;
     adminId?: string;
+    platformAdminId?: string;
   }>();
   get isCommunityAdmin() {
     return !!this.requestContext.getStore()?.adminId;
   }
   get adminActorId() {
     return this.requestContext.getStore()?.adminId;
+  }
+  get isPlatformAdministrator() {
+    return !!this.requestContext.getStore()?.platformAdminId;
   }
   get appId() {
     return this.requestContext.getStore()?.appId || this.defaultAppId;
@@ -141,9 +152,12 @@ export class AffiliatesStore {
   request<T>(fn: () => T): T {
     return this.requestContext.run({ actor: 'anonymous' }, fn);
   }
-  setActor(id: string) {
+  setActor(id: string, platformAdminId?: string) {
     const scope = this.requestContext.getStore();
-    if (scope) scope.actor = 'affiliate:' + id;
+    if (scope) {
+      scope.actor = platformAdminId ? 'platform-admin:' + platformAdminId : 'affiliate:' + id;
+      scope.platformAdminId = platformAdminId;
+    }
   }
   constructor(
     readonly prisma: PrismaClient,
@@ -157,6 +171,9 @@ export class AffiliatesStore {
     return this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.tenant_id',${this.tenantId},true)`;
+        const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: this.tenantId }, select: { status: true } });
+        if (directory?.status === 'ARCHIVED')
+          throw Object.assign(new Error('Este directorio está archivado.'), { status: 403 });
         const n = await tx.affiliateNetwork.findUnique({
           where: { tenantId_appId: { tenantId: this.tenantId, appId: this.appId } },
         });
@@ -216,7 +233,7 @@ export class AffiliatesStore {
           where: { ...scope, token: p[0], expires: { gt: BigInt(p[1]) } },
         });
         return (
-          s && { token: s.token, member_id: s.memberId, csrf: s.csrf, expires: Number(s.expires) }
+          s && { token: s.token, member_id: s.memberId, csrf: s.csrf, expires: Number(s.expires), platform_admin_id: s.platformAdminId }
         );
       }
       if (q === 'INSERT INTO sessions VALUES(?,?,?,?)')
