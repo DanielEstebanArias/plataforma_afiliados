@@ -55,7 +55,7 @@ function main(){
  SELECT m.id,m.name,lower(m.email),m.password,'ACTIVE'
  FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"
  WHERE m."tenantId"='${tenantId}'::uuid AND n."platformRoot"=true AND m.role='ROOT' AND m."parentId" IS NULL
- ON CONFLICT(email) DO UPDATE SET name=excluded.name,password=excluded.password,status='ACTIVE';
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,password=excluded.password,status='ACTIVE';
  INSERT INTO "PlatformDirectory"(id,"tenantId","rootAppId",name,slogan,"divisionLabel","directoryAdminName","directoryAdminEmail",status,"createdBy")
  SELECT '${tenantId}'::uuid,'${tenantId}'::uuid,'${appId}'::uuid,'Directorio de Antioquia','Por Antioquia ¡Lo que sea!','Subregiones','José Ignacio Cano',lower(m.email),'ACTIVE',a.id
  FROM "AffiliateMember" m JOIN "AffiliateNetwork" n ON n.id=m."networkId"

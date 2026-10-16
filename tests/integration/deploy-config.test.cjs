@@ -14,6 +14,7 @@ test('Railway image serves frontend and API from one service',()=>{
  assert.match(prepare,/202610150001_campaigns/);
  assert.match(prepare,/202610160001_platform_directories/);
  assert.match(prepare,/202610160002_directory_colors/);
+ assert.match(prepare,/ON CONFLICT\(id\) DO UPDATE SET name=excluded\.name,email=excluded\.email/);
  assert.ok(fs.existsSync('affiliates/web/campaign.html'));
  assert.ok(fs.existsSync('affiliates/web/index.html'));
  assert.deepEqual(JSON.parse(fs.readFileSync('affiliates/web/app-config.json','utf8')),{apiBase:''});
