@@ -4,8 +4,14 @@ import fs from 'node:fs';
 
 test('platform directory schema isolates global administration from tenant data', () => {
   const schema = fs.readFileSync('prisma/schema.prisma', 'utf8');
-  const migration = fs.readFileSync('prisma/migrations/202610160001_platform_directories/migration.sql', 'utf8');
-  const colorsMigration = fs.readFileSync('prisma/migrations/202610160002_directory_colors/migration.sql', 'utf8');
+  const migration = fs.readFileSync(
+    'prisma/migrations/202610160001_platform_directories/migration.sql',
+    'utf8',
+  );
+  const colorsMigration = fs.readFileSync(
+    'prisma/migrations/202610160002_directory_colors/migration.sql',
+    'utf8',
+  );
   assert.match(schema, /model PlatformAdministrator/);
   assert.match(schema, /model PlatformDirectory/);
   assert.match(schema, /divisionLabel\s+String/);
@@ -19,7 +25,10 @@ test('platform directory schema isolates global administration from tenant data'
 
 test('global control tables are excluded from tenant RLS validation only', () => {
   const manager = fs.readFileSync('src/security/tenant-context.manager.ts', 'utf8');
-  assert.match(manager, /PlatformAdministrator.*PlatformAdminSession.*PlatformAuditLog.*PlatformDirectory/);
+  assert.match(
+    manager,
+    /PlatformAdministrator.*PlatformAdminSession.*PlatformAuditLog.*PlatformDirectory/,
+  );
   assert.match(manager, /NOT c\.relrowsecurity OR NOT c\.relforcerowsecurity/);
 });
 
@@ -31,6 +40,24 @@ test('global administrator can manage directories only through protected routes'
   assert.match(service, /status === 'ARCHIVED'/);
   assert.match(service, /platformAdminId: administrator\.id/);
   assert.match(service, /actor: 'platform-admin:' \+ administrator\.id/);
+  assert.match(service, /email !== permanentAdminEmail/);
+  assert.match(service, /activeSession\.administrator\.email !== permanentAdminEmail/);
+});
+
+test('directory login and identity checks span every division', () => {
+  const server = fs.readFileSync('affiliates/server.cjs', 'utf8');
+  const store = fs.readFileSync('src/affiliates/store.ts', 'utf8');
+  const features = fs.readFileSync('src/affiliates/features.ts', 'utf8');
+  const campaigns = fs.readFileSync('src/affiliates/campaigns.ts', 'utf8');
+  assert.match(server, /if \(db\.loginCandidates\)/);
+  assert.doesNotMatch(server, /loginCandidates && !req\.baseUrl/);
+  assert.match(store, /assertDirectoryIdentityAvailable/);
+  assert.match(store, /AffiliateMember/);
+  assert.match(store, /AffiliateCampaignEntry/);
+  assert.match(store, /correo electrónico ya está registrado en otra división/);
+  assert.match(store, /número de cédula ya está registrado en otra división/);
+  assert.match(features, /await assertDirectoryIdentityAvailable/);
+  assert.match(campaigns, /await assertDirectoryIdentityAvailable/);
 });
 
 test('directory UI exposes configurable division labels and destructive confirmation', () => {
@@ -51,6 +78,8 @@ test('directory UI exposes configurable division labels and destructive confirma
   assert.match(app, /divisionLabel\(\)/);
   assert.match(app, /applyDirectoryTheme/);
   assert.match(app, /Superadministrador de directorio/);
+  assert.doesNotMatch(ui, /Gran superadministrador/i);
+  assert.doesNotMatch(app, /Gran superadministrador/i);
 });
 
 test('division heading uses only the configured name', () => {

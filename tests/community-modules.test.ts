@@ -176,11 +176,13 @@ test('platform root account can be updated without removing the protected networ
     schemaId: 'schema',
   };
   const tx = {
+    $queryRaw: async () => [],
     affiliateNetwork: { findFirst: async () => network },
     affiliateMember: {
       findFirst: async ({ where }: any) => (where.role === 'ROOT' ? root : null),
       update: async ({ data }: any) => (saved = { ...root, ...data }),
     },
+    affiliateCampaignEntry: { findFirst: async () => null },
     affiliateSession: { deleteMany: async () => ({ count: 1 }) },
     dynamicRecord: { upsert: async () => ({}) },
     auditLog: { create: async () => ({}) },
@@ -188,17 +190,13 @@ test('platform root account can be updated without removing the protected networ
   const features = new NetworkFeatures({
     tx: async (fn: any) => fn(tx, network),
   } as any);
-  await features.changeRoot(
-    { id: root.id, role: 'ROOT' },
-    id,
-    {
-      root: {
-        name: 'José Ignacio Cano',
-        email: 'jose@example.test',
-        password: 'NuevaClaveSegura2026!',
-      },
+  await features.changeRoot({ id: root.id, role: 'ROOT' }, id, {
+    root: {
+      name: 'José Ignacio Cano',
+      email: 'jose@example.test',
+      password: 'NuevaClaveSegura2026!',
     },
-  );
+  });
   assert.equal(saved.name, 'José Ignacio Cano');
   assert.equal(saved.email, 'jose@example.test');
   assert.match(saved.password, /^[0-9a-f]+:[0-9a-f]+$/);

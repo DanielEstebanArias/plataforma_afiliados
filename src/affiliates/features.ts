@@ -24,8 +24,12 @@ function requireModule(n: any, key: keyof typeof defaultModules) {
   if (!n.platformRoot && n.modules?.[key] === false)
     fail(403, 'Este submódulo no está habilitado para la división.');
 }
-import type { AffiliatesStore } from './store';
-import { createForm, mirrorMember } from './store';
+import {
+  assertDirectoryIdentityAvailable,
+  createForm,
+  mirrorMember,
+  type AffiliatesStore,
+} from './store';
 import { csvLine, exportColumns } from './csv';
 function fail(status: number, message: string): never {
   throw Object.assign(new Error(message), { status });
@@ -105,29 +109,55 @@ export class NetworkFeatures {
     return this.store.tx(async (tx, n) => {
       this.requireSuperadministrator(me, n);
       if (input !== undefined) {
-        const x = Number(input.nameX), y = Number(input.nameY), size = Number(input.fontSize);
+        const x = Number(input.nameX),
+          y = Number(input.nameY),
+          size = Number(input.fontSize);
         if (!Number.isFinite(x) || x < 0 || x > 100 || !Number.isFinite(y) || y < 0 || y > 100)
           fail(400, 'Ubica el nombre dentro de la tarjeta.');
         if (!Number.isInteger(size) || size < 16 || size > 120)
           fail(400, 'El tamaño del nombre debe estar entre 16 y 120.');
         if (typeof input.textColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.textColor))
           fail(400, 'Selecciona un color válido para el nombre.');
-        const current = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: { birthdayCard: true } });
+        const current = await tx.tenant.findUniqueOrThrow({
+          where: { id: n.tenantId },
+          select: { birthdayCard: true },
+        });
         if (input.enabled === true && !current.birthdayCard)
           fail(400, 'Carga una tarjeta antes de activar los envíos.');
-        await tx.tenant.update({ where: { id: n.tenantId }, data: {
-          birthdayNameX: x, birthdayNameY: y, birthdayFontSize: size,
-          birthdayTextColor: input.textColor.toUpperCase(), birthdayEnabled: input.enabled === true,
-        }});
-        await this.audit(tx, me.id, 'birthday.config.updated', n.tenantId, { nameX: x, nameY: y, fontSize: size, enabled: input.enabled === true });
+        await tx.tenant.update({
+          where: { id: n.tenantId },
+          data: {
+            birthdayNameX: x,
+            birthdayNameY: y,
+            birthdayFontSize: size,
+            birthdayTextColor: input.textColor.toUpperCase(),
+            birthdayEnabled: input.enabled === true,
+          },
+        });
+        await this.audit(tx, me.id, 'birthday.config.updated', n.tenantId, {
+          nameX: x,
+          nameY: y,
+          fontSize: size,
+          enabled: input.enabled === true,
+        });
       }
-      const config = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: {
-        birthdayCard: true, birthdayNameX: true, birthdayNameY: true,
-        birthdayFontSize: true, birthdayTextColor: true, birthdayEnabled: true,
-      }});
+      const config = await tx.tenant.findUniqueOrThrow({
+        where: { id: n.tenantId },
+        select: {
+          birthdayCard: true,
+          birthdayNameX: true,
+          birthdayNameY: true,
+          birthdayFontSize: true,
+          birthdayTextColor: true,
+          birthdayEnabled: true,
+        },
+      });
       return {
-        hasCard: !!config.birthdayCard, nameX: config.birthdayNameX, nameY: config.birthdayNameY,
-        fontSize: config.birthdayFontSize, textColor: config.birthdayTextColor,
+        hasCard: !!config.birthdayCard,
+        nameX: config.birthdayNameX,
+        nameY: config.birthdayNameY,
+        fontSize: config.birthdayFontSize,
+        textColor: config.birthdayTextColor,
         enabled: config.birthdayEnabled,
         mailReady: !!process.env.RESEND_API_KEY && !!process.env.BIRTHDAY_FROM_EMAIL,
       };
@@ -138,11 +168,21 @@ export class NetworkFeatures {
       this.requireSuperadministrator(me, n);
       if (base64 !== undefined) {
         const image = photo(base64);
-        await tx.tenant.update({ where: { id: n.tenantId }, data: { birthdayCard: image.photo, birthdayCardMime: image.photoMime, birthdayEnabled: false } });
+        await tx.tenant.update({
+          where: { id: n.tenantId },
+          data: {
+            birthdayCard: image.photo,
+            birthdayCardMime: image.photoMime,
+            birthdayEnabled: false,
+          },
+        });
         await this.audit(tx, me.id, 'birthday.card.updated', n.tenantId, {});
         return { ok: true };
       }
-      const config = await tx.tenant.findUniqueOrThrow({ where: { id: n.tenantId }, select: { birthdayCard: true, birthdayCardMime: true } });
+      const config = await tx.tenant.findUniqueOrThrow({
+        where: { id: n.tenantId },
+        select: { birthdayCard: true, birthdayCardMime: true },
+      });
       if (!config.birthdayCard) fail(404, 'Aún no se ha cargado la tarjeta de cumpleaños.');
       return { bytes: config.birthdayCard, mime: config.birthdayCardMime || 'image/jpeg' };
     });
@@ -152,7 +192,10 @@ export class NetworkFeatures {
       async (tx, n) => {
         if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
           fail(403, 'Solo el superadministrador exporta todas las divisiones.');
-        const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { divisionLabel: true } });
+        const directory = await (tx as any).platformDirectory?.findUnique({
+          where: { tenantId: n.tenantId },
+          select: { divisionLabel: true },
+        });
         const divisionLabel = directory?.divisionLabel || 'Subregiones';
         const networks = await tx.affiliateNetwork.findMany({
           where: { tenantId: n.tenantId },
@@ -260,17 +303,38 @@ export class NetworkFeatures {
           let entryCursor: string | undefined;
           while (true) {
             const entries = await tx.affiliateCampaignEntry.findMany({
-              where: { tenantId: n.tenantId, networkId: network.id, ...(entryCursor ? { id: { gt: entryCursor } } : {}) },
+              where: {
+                tenantId: n.tenantId,
+                networkId: network.id,
+                ...(entryCursor ? { id: { gt: entryCursor } } : {}),
+              },
               include: { campaign: { select: { id: true, name: true } } },
-              orderBy: { id: 'asc' }, take: 1000,
+              orderBy: { id: 'asc' },
+              take: 1000,
             });
             if (!entries.length) break;
-            await write(entries.map((entry) => csvLine([
-              network.name, network.id, entry.id, entry.name, entry.email,
-              entry.campaign.id, entry.campaign.name, 'CAMPAÑA', 'Registro de campaña',
-              entry.createdAt.toISOString(), 'No',
-              ...columns.map((_, index) => mapping.has(index) ? ((entry.data as any)[mapping.get(index)!] ?? '') : ''),
-            ])).join(''));
+            await write(
+              entries
+                .map((entry) =>
+                  csvLine([
+                    network.name,
+                    network.id,
+                    entry.id,
+                    entry.name,
+                    entry.email,
+                    entry.campaign.id,
+                    entry.campaign.name,
+                    'CAMPAÑA',
+                    'Registro de campaña',
+                    entry.createdAt.toISOString(),
+                    'No',
+                    ...columns.map((_, index) =>
+                      mapping.has(index) ? ((entry.data as any)[mapping.get(index)!] ?? '') : '',
+                    ),
+                  ]),
+                )
+                .join(''),
+            );
             records += entries.length;
             entryCursor = entries.at(-1)!.id;
           }
@@ -354,7 +418,12 @@ export class NetworkFeatures {
       const level = Number(member.level);
       if (!member.loginOverride && n.maxLoginLevel !== null && level > n.maxLoginLevel)
         fail(403, 'Tu afiliación está registrada, pero tu nivel no tiene acceso a la app.');
-      return { level, maxLoginLevel: n.maxLoginLevel, loginOverride: member.loginOverride, superuser: n.platformRoot };
+      return {
+        level,
+        maxLoginLevel: n.maxLoginLevel,
+        loginOverride: member.loginOverride,
+        superuser: n.platformRoot,
+      };
     });
   }
   async changeRoot(me: any, id: string, b: any) {
@@ -365,8 +434,7 @@ export class NetworkFeatures {
         const target = await tx.affiliateNetwork.findFirst({
           where: { id: uuid(id), tenantId: n.tenantId },
         });
-        if (!target)
-          fail(403, 'División no disponible para cambiar su raíz.');
+        if (!target) fail(403, 'División no disponible para cambiar su raíz.');
         const input = b?.root;
         if (
           !input ||
@@ -389,11 +457,14 @@ export class NetworkFeatures {
         });
         if (!root) fail(404, 'No se encontró el usuario raíz de esta división.');
         const email = input.email.trim().toLowerCase();
-        const duplicate = await tx.affiliateMember.findFirst({
-          where: { tenantId: n.tenantId, networkId: target.id, email, id: { not: root.id } },
-          select: { id: true },
-        });
-        if (duplicate) fail(409, 'Ese correo ya pertenece a otro aliado de la división.');
+        await assertDirectoryIdentityAvailable(
+          tx,
+          n.tenantId,
+          target.fields as any,
+          email,
+          root.data as Record<string, unknown>,
+          { memberId: root.id },
+        );
         const salt = randomBytes(16).toString('hex');
         const password =
           salt + ':' + ((await hashPassword(input.password, salt, 64)) as Buffer).toString('hex');
@@ -414,7 +485,7 @@ export class NetworkFeatures {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        fail(409, 'Ese correo ya pertenece a otro aliado de la división.');
+        fail(409, 'Este correo electrónico ya está registrado en otra división.');
       throw error;
     }
   }
@@ -484,10 +555,12 @@ export class NetworkFeatures {
         if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200)
           fail(400, 'La nueva contraseña debe tener entre 10 y 200 caracteres.');
         const salt = randomBytes(16).toString('hex');
-        data.password = salt + ':' + ((await hashPassword(b.password, salt, 64)) as Buffer).toString('hex');
+        data.password =
+          salt + ':' + ((await hashPassword(b.password, salt, 64)) as Buffer).toString('hex');
       }
       await tx.affiliateMember.update({ where: { id: member.id }, data });
-      if (!enabled) await tx.affiliateSession.deleteMany({ where: { networkId: n.id, memberId: member.id } });
+      if (!enabled)
+        await tx.affiliateSession.deleteMany({ where: { networkId: n.id, memberId: member.id } });
       await this.audit(tx, me.id, 'member.access.override.updated', member.id, {
         enabled,
         level: member.level,
@@ -569,7 +642,19 @@ export class NetworkFeatures {
         await this.audit(tx, me.id, 'community.access.updated', n.id, { maxLoginLevel: limit });
         n.maxLoginLevel = limit;
       }
-      const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true, primaryColor: true, secondaryColor: true, accentColor: true, backgroundColor: true } });
+      const directory = await (tx as any).platformDirectory?.findUnique({
+        where: { tenantId: n.tenantId },
+        select: {
+          name: true,
+          slogan: true,
+          divisionLabel: true,
+          directoryAdminName: true,
+          primaryColor: true,
+          secondaryColor: true,
+          accentColor: true,
+          backgroundColor: true,
+        },
+      });
       return {
         id: n.id,
         name: n.name,
@@ -580,7 +665,16 @@ export class NetworkFeatures {
           : { ...defaultModules, ...n.modules },
         superuser: this.store.isCommunityAdmin || (me.role === 'ROOT' && n.platformRoot),
         hasPhoto: !!n.photo,
-        directory: directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', primaryColor: '#073d34', secondaryColor: '#032d27', accentColor: '#c8f000', backgroundColor: '#f5f8f5' },
+        directory: directory || {
+          name: 'Directorio de Antioquia',
+          slogan: 'Por Antioquia ¡Lo que sea!',
+          divisionLabel: 'Subregiones',
+          directoryAdminName: 'José Ignacio Cano',
+          primaryColor: '#073d34',
+          secondaryColor: '#032d27',
+          accentColor: '#c8f000',
+          backgroundColor: '#f5f8f5',
+        },
         platformAdministrator: this.store.isPlatformAdministrator,
       };
     });
@@ -627,7 +721,13 @@ export class NetworkFeatures {
       const images = new Map(photos.map((p) => [p.id, p.present]));
       return {
         superuser,
-        divisionLabel: (await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { divisionLabel: true } }))?.divisionLabel || 'Subregiones',
+        divisionLabel:
+          (
+            await (tx as any).platformDirectory?.findUnique({
+              where: { tenantId: n.tenantId },
+              select: { divisionLabel: true },
+            })
+          )?.divisionLabel || 'Subregiones',
         canCreate:
           me.role === 'ROOT' && (superuser || (n.modules as any)?.createCommunities === true),
         communities: rows.map(({ members, ...c }) => ({
@@ -685,6 +785,14 @@ export class NetworkFeatures {
         Object.values(modules).some((enabled) => enabled)
       )
         fail(403, 'Solo el superadministrador habilita submódulos.');
+      const rootData = rootInput.birthDate ? { birthDate: rootInput.birthDate } : {};
+      await assertDirectoryIdentityAvailable(
+        tx,
+        n.tenantId,
+        n.fields as any,
+        rootInput.email,
+        rootData,
+      );
       await tx.app.create({
         data: {
           id: appId,
@@ -718,7 +826,7 @@ export class NetworkFeatures {
           email: rootInput.email.trim().toLowerCase(),
           password,
           role: 'ROOT',
-          data: rootInput.birthDate ? { birthDate: rootInput.birthDate } : {},
+          data: rootData,
         },
       });
       await mirrorMember(tx, network, root);
