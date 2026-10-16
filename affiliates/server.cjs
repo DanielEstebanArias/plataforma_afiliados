@@ -139,6 +139,7 @@ function createApp(
           return send({
             configured: !!(await org()),
             name: (await org())?.name || 'Afiliados',
+            ...(db.directoryBranding ? { directory: await db.directoryBranding() } : {}),
           });
         if (p === '/api/platform-logo' && method === 'GET' && db.features) {
           const result = await db.features.platformLogo();
@@ -280,7 +281,7 @@ function createApp(
         let me = session && (await member(session.member_id));
         if (!me || me.status !== 'active') fail(401, 'Inicia sesión para continuar.');
         if(db.features) await db.features.access(me.id);
-        db.setActor?.(me.id);
+        db.setActor?.(me.id, session.platform_admin_id);
         if (method !== 'GET' && req.headers['x-csrf-token'] !== session.csrf)
           fail(403, 'Sesión de formulario inválida. Recarga la página.');
         if (db.terms) {
@@ -294,7 +295,7 @@ function createApp(
         }
         const adminRoute = p.match(/^\/api\/communities\/([^/]+)\/admin(\/(?:me|stats|settings|dashboard|fields|registration|superapp|communities|campaigns(?:\/entries(?:\/[^/]+)?|\/[^/]+(?:\/qr)?)?|members(?:\/[^/]+(?:\/(?:photo|access))?)?))$/);
         if (adminRoute) {
-          if (!db.selectCommunity) fail(404, 'Subregión no disponible.');
+          if (!db.selectCommunity) fail(404, 'División no disponible.');
           me = await db.selectCommunity(me, adminRoute[1]);
           p = '/api' + adminRoute[2];
         }
@@ -314,6 +315,7 @@ function createApp(
               fields: JSON.parse((await org()).fields),
               integration: (await org()).integration,
             },
+            platformAdministrator: !!session.platform_admin_id,
           });
         if(db.features){
           if(p==='/api/platform-logo'&&method==='PUT'){
@@ -335,7 +337,7 @@ function createApp(
               if (res.destroyed) throw new Error('Exportación cancelada.');
               if (!res.headersSent) res.writeHead(200, {
                 'Content-Type':'text/csv; charset=utf-8', 'Cache-Control':'no-store',
-                'Content-Disposition':'attachment; filename="todas-las-subregiones.csv"',
+                'Content-Disposition':'attachment; filename="todas-las-divisiones.csv"',
               });
               if (!res.write(chunk)) await new Promise((resolve, reject) => {
                 const cleanup = () => { res.off('drain', done); res.off('close', closed); };
@@ -366,7 +368,8 @@ function createApp(
             const listed=await db.campaigns.list(me),campaign=listed.campaigns.find(c=>c.id===campaignQr[1]);
             if(!campaign)fail(404,'Campaña no disponible.');
             const protocol=process.env.NODE_ENV==='production'?'https':'http';
-            const result=await db.campaigns.qr(me,campaign.id,`${protocol}://${host}/campaign.html?token=${campaign.token}`);
+            const publicBase=req.baseUrl||'';
+            const result=await db.campaigns.qr(me,campaign.id,`${protocol}://${host}${publicBase}/campaign.html?token=${campaign.token}`);
             res.writeHead(200,{'Content-Type':'image/svg+xml','Content-Disposition':`attachment; filename="campana-${campaign.id}.svg"`,'Cache-Control':'private, no-store'});
             return res.end(result.svg);
           }

@@ -79,10 +79,22 @@ export async function runBirthdayDelivery(prisma: PrismaClient, tenantId: string
   }, { timeout: 120000 });
 }
 
-export function startBirthdayScheduler(prisma: PrismaClient, tenantId?: string) {
-  if (!tenantId) return;
-  const run = () => void runBirthdayDelivery(prisma, tenantId).catch((error) =>
-    console.error('Birthday delivery failed:', error instanceof Error ? error.message : 'Unknown error'));
+export function startBirthdayScheduler(prisma: PrismaClient, fallbackTenantId?: string) {
+  const run = () => void (async () => {
+    const directories = await prisma.platformDirectory.findMany({
+      where: { status: 'ACTIVE' },
+      select: { tenantId: true },
+    });
+    const tenantIds = [...new Set([
+      ...directories.map((directory) => directory.tenantId),
+      ...(directories.length === 0 && fallbackTenantId ? [fallbackTenantId] : []),
+    ])];
+    for (const tenantId of tenantIds) {
+      await runBirthdayDelivery(prisma, tenantId).catch((error) =>
+        console.error(`Birthday delivery failed for tenant ${tenantId}:`, error instanceof Error ? error.message : 'Unknown error'));
+    }
+  })().catch((error) =>
+    console.error('Birthday scheduler failed:', error instanceof Error ? error.message : 'Unknown error'));
   run();
   const timer = setInterval(run, 60 * 60 * 1000);
   timer.unref();

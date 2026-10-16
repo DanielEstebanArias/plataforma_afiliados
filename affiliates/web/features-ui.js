@@ -2,7 +2,7 @@ const moduleLabels = {
   access: 'Acceso y foto',
   dashboard: 'Dashboard',
   form: 'Formulario',
-  createCommunities: 'Crear subregiones',
+  createCommunities: 'Crear divisiones',
 };
 async function exportAllCommunities() {
   const button = $('#exportAllCommunities');
@@ -16,7 +16,7 @@ async function exportAllCommunities() {
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'todas-las-subregiones.csv';
+    link.download = 'todas-las-divisiones.csv';
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('CSV global descargado.');
@@ -24,7 +24,7 @@ async function exportAllCommunities() {
     toast(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = 'Descargar CSV de todas las subregiones';
+    button.textContent = `Descargar CSV de ${divisionLabel()}`;
   }
 }
 async function renderBirthdays() {
@@ -117,24 +117,25 @@ async function communityPhotos() {
 }
 async function renderCommunities() {
   const host = $('#featurePage');
-  host.innerHTML = '<p>Cargando subregiones…</p>';
+  host.innerHTML = '<p>Cargando divisiones…</p>';
   try {
     const result = await api('/communities');
+    const divisions = result.divisionLabel || divisionLabel();
     const labels = {
       PENDING: 'Pendiente de aprobación',
       APPROVED: 'Habilitada',
       REJECTED: 'Rechazada',
       SUSPENDED: 'Suspendida',
     };
-    host.innerHTML = `<div class="hero"><div><div class="eyebrow">${result.superuser ? 'Superusuario · revisión y aprobación' : 'Tu espacio de subregiones'}</div><h1>Subregiones que crecen.</h1><p>Las nuevas subregiones necesitan aprobación antes de operar.</p></div>${result.superuser ? '<div class="profile-actions"><button id="changePlatformLogo">Cambiar logo</button><button id="exportAllCommunities">Descargar CSV de todas las subregiones</button></div>' : ''}${result.canCreate ? '<button class="primary" id="requestCommunity">＋ Crear subregión</button>' : ''}</div><div class="community-grid">${result.communities.map((c) => `<article class="community-card"><div class="community-cover">${c.hasPhoto ? `<img data-community-photo="${c.id}" alt="Foto de ${esc(c.name)}">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="community-body"><span class="badge ${c.approvalStatus === 'APPROVED' ? '' : 'inactive'}">${labels[c.approvalStatus]}</span><h2>${esc(c.name)}</h2>${result.superuser && c.root ? `<p class="muted">Usuario raíz: ${esc(c.root.name)}<br>${esc(c.root.email)}</p>` : ''}<p class="muted">${c.current ? 'Subregión actual' : c.approvalStatus === 'APPROVED' ? 'Accede con el correo y contraseña de la cuenta raíz asignada.' : 'La cuenta raíz tendrá acceso cuando se apruebe la solicitud.'}</p>${c.reviewNote ? `<p class="review-note">${esc(c.reviewNote)}</p>` : ''}<div class="profile-actions">${result.superuser ? `<button class="primary" data-community-tree="${c.id}">Administrar subregión</button>` : c.current ? '<button data-current="true">Ver mi árbol</button>' : c.approvalStatus === 'APPROVED' ? `<a class="button-link" href="${esc(c.url)}">Abrir subregión →</a>` : ''}${result.superuser ? `<button class="ghost" data-change-name="${c.id}">Cambiar nombre</button><button data-review="${c.id}" data-status="APPROVED">Aprobar / habilitar</button><button class="ghost" data-review="${c.id}" data-status="${c.approvalStatus === 'APPROVED' ? 'SUSPENDED' : 'REJECTED'}">${c.approvalStatus === 'APPROVED' ? 'Suspender' : 'Rechazar'}</button><button class="ghost" data-modules="${c.id}">Configurar submódulos</button>` : ''}${result.superuser ? `<button class="ghost" data-change-root="${c.id}">Cambiar usuario raíz</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-delete-community="${c.id}">Eliminar subregión</button>` : ''}${c.canEditPhoto ? `<button class="ghost" data-community-edit="${c.id}">Cambiar foto</button>` : ''}</div></div></article>`).join('')}</div>`;
+    host.innerHTML = `<div class="hero"><div><div class="eyebrow">${result.superuser ? 'Superadministración del directorio' : `Tu espacio de ${esc(divisions)}`}</div><h1>${esc(divisions)} que crecen.</h1><p>Las nuevas divisiones necesitan aprobación antes de operar.</p></div>${result.superuser ? `<div class="profile-actions"><button id="changePlatformLogo">Cambiar logo</button><button id="exportAllCommunities">Descargar CSV de ${esc(divisions)}</button></div>` : ''}${result.canCreate ? `<button class="primary" id="requestCommunity">＋ Crear en ${esc(divisions)}</button>` : ''}</div><div class="community-grid">${result.communities.map((c) => `<article class="community-card"><div class="community-cover">${c.hasPhoto ? `<img data-community-photo="${c.id}" alt="Foto de ${esc(c.name)}">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="community-body"><span class="badge ${c.approvalStatus === 'APPROVED' ? '' : 'inactive'}">${labels[c.approvalStatus]}</span><h2>${esc(c.name)}</h2>${result.superuser && c.root ? `<p class="muted">Usuario raíz: ${esc(c.root.name)}<br>${esc(c.root.email)}</p>` : ''}<p class="muted">${c.current ? 'División actual' : c.approvalStatus === 'APPROVED' ? 'Accede con el correo y contraseña de la cuenta raíz asignada.' : 'La cuenta raíz tendrá acceso cuando se apruebe la solicitud.'}</p>${c.reviewNote ? `<p class="review-note">${esc(c.reviewNote)}</p>` : ''}<div class="profile-actions">${result.superuser ? `<button class="primary" data-community-tree="${c.id}">Administrar división</button>` : c.current ? '<button data-current="true">Ver mi árbol</button>' : c.approvalStatus === 'APPROVED' ? `<a class="button-link" href="${esc(c.url)}">Abrir división →</a>` : ''}${result.superuser ? `<button class="ghost" data-change-name="${c.id}">Cambiar nombre</button><button data-review="${c.id}" data-status="APPROVED">Aprobar / habilitar</button><button class="ghost" data-review="${c.id}" data-status="${c.approvalStatus === 'APPROVED' ? 'SUSPENDED' : 'REJECTED'}">${c.approvalStatus === 'APPROVED' ? 'Suspender' : 'Rechazar'}</button><button class="ghost" data-modules="${c.id}">Configurar submódulos</button>` : ''}${result.superuser ? `<button class="ghost" data-change-root="${c.id}">Cambiar usuario raíz</button>` : ''}${result.superuser && !c.platformRoot ? `<button class="ghost" data-delete-community="${c.id}">Eliminar división</button>` : ''}${c.canEditPhoto ? `<button class="ghost" data-community-edit="${c.id}">Cambiar foto</button>` : ''}</div></div></article>`).join('')}</div>`;
     if ($('#exportAllCommunities')) $('#exportAllCommunities').onclick = exportAllCommunities;
     if ($('#changePlatformLogo')) $('#changePlatformLogo').onclick = editPlatformLogo;
     host.querySelectorAll('[data-delete-community]').forEach((button) => {
       button.onclick = () => {
         const community = result.communities.find((c) => c.id === button.dataset.deleteCommunity);
         modal(
-          'Eliminar subregión',
-          `<form id="deleteCommunityForm"><p>Vas a eliminar permanentemente <strong>${esc(community.name)}</strong>, sus aliados, fotos, sesiones y formularios. Esta acción no se puede deshacer.</p><label>Escribe el nombre exacto de la subregión para confirmar<input name="confirmName" required autocomplete="off"></label><p class="error" id="deleteCommunityError"></p><div class="actions"><button type="button" id="cancelDeleteCommunity">Cancelar</button><button class="primary" id="confirmDeleteCommunity" disabled>Eliminar definitivamente</button></div></form>`,
+          'Eliminar división',
+          `<form id="deleteCommunityForm"><p>Vas a eliminar permanentemente <strong>${esc(community.name)}</strong>, sus aliados, fotos, sesiones y formularios. Esta acción no se puede deshacer.</p><label>Escribe el nombre exacto de la división para confirmar<input name="confirmName" required autocomplete="off"></label><p class="error" id="deleteCommunityError"></p><div class="actions"><button type="button" id="cancelDeleteCommunity">Cancelar</button><button class="primary" id="confirmDeleteCommunity" disabled>Eliminar definitivamente</button></div></form>`,
         );
         const form = $('#deleteCommunityForm');
         const submit = $('#confirmDeleteCommunity');
@@ -153,7 +154,7 @@ async function renderCommunities() {
             );
             $('#modal').close();
             await renderCommunities();
-            toast('Subregión eliminada.');
+            toast('División eliminada.');
           } catch (error) {
             $('#deleteCommunityError').textContent = error.message;
             submit.disabled = form.elements.confirmName.value !== community.name;
@@ -169,8 +170,8 @@ async function renderCommunities() {
       button.onclick = () => {
         const community = result.communities.find((c) => c.id === button.dataset.changeName);
         modal(
-          'Cambiar nombre de la subregión',
-          `<form id="changeCommunityNameForm"><label>Nombre de la subregión<input name="name" value="${esc(community.name)}" required maxlength="150" autocomplete="off"></label><p class="error" id="changeCommunityNameError"></p><button class="primary">Guardar nombre</button></form>`,
+          'Cambiar nombre de la división',
+          `<form id="changeCommunityNameForm"><label>Nombre de la división<input name="name" value="${esc(community.name)}" required maxlength="150" autocomplete="off"></label><p class="error" id="changeCommunityNameError"></p><button class="primary">Guardar nombre</button></form>`,
         );
         $('#changeCommunityNameForm').onsubmit = async (event) => {
           event.preventDefault();
@@ -184,7 +185,7 @@ async function renderCommunities() {
             );
             $('#modal').close();
             await renderCommunities();
-            toast('Nombre de la subregión actualizado.');
+            toast('Nombre de la división actualizado.');
           } catch (error) {
             $('#changeCommunityNameError').textContent = error.message;
           } finally {
@@ -204,8 +205,8 @@ async function renderCommunities() {
       (b) =>
         (b.onclick = () => {
           modal(
-            'Revisar subregión',
-            `<form id="reviewForm"><p>${b.dataset.status === 'APPROVED' ? 'Habilitarás el ingreso y la administración de esta subregión.' : 'Se impedirá el acceso a la subregión.'}</p><label>Motivo / observaciones<textarea name="note" maxlength="500" ${b.dataset.status === 'APPROVED' ? '' : 'required'}></textarea></label><p id="reviewError" class="error"></p><button class="primary">Confirmar decisión</button></form>`,
+            'Revisar división',
+            `<form id="reviewForm"><p>${b.dataset.status === 'APPROVED' ? 'Habilitarás el ingreso y la administración de esta división.' : 'Se impedirá el acceso a la división.'}</p><label>Motivo / observaciones<textarea name="note" maxlength="500" ${b.dataset.status === 'APPROVED' ? '' : 'required'}></textarea></label><p id="reviewError" class="error"></p><button class="primary">Confirmar decisión</button></form>`,
           );
           $('#reviewForm').onsubmit = async (e) => {
             e.preventDefault();
@@ -260,7 +261,7 @@ async function renderCommunities() {
         const community = result.communities.find((c) => c.id === button.dataset.changeRoot);
         modal(
           'Cambiar usuario raíz · ' + community.name,
-          `<form id="changeRootForm"><p class="form-note">Actualiza la cuenta raíz de esta subregión. Se conserva toda su red de aliados y se cierran las sesiones anteriores de la cuenta raíz.</p><label>Nombre del usuario raíz<input name="name" value="${esc(community.root?.name || '')}" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="email" type="email" value="${esc(community.root?.email || '')}" required maxlength="254" autocomplete="off"></label><label>Nueva contraseña<input name="password" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label><p class="error" id="changeRootError"></p><button class="primary">Guardar usuario raíz</button></form>`,
+          `<form id="changeRootForm"><p class="form-note">Actualiza la cuenta raíz de esta división. Se conserva toda su red de aliados y se cierran las sesiones anteriores de la cuenta raíz.</p><label>Nombre del usuario raíz<input name="name" value="${esc(community.root?.name || '')}" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="email" type="email" value="${esc(community.root?.email || '')}" required maxlength="254" autocomplete="off"></label><label>Nueva contraseña<input name="password" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label><p class="error" id="changeRootError"></p><button class="primary">Guardar usuario raíz</button></form>`,
         );
         $('#changeRootForm').onsubmit = async (event) => {
           event.preventDefault();
@@ -292,7 +293,7 @@ async function renderCommunities() {
 }
 function editCommunityPhoto(id) {
   modal(
-    'Foto de subregión',
+    'Foto de división',
     '<form id="communityPhotoForm"><label>Selecciona una imagen<input name="photo" type="file" accept="image/*" required></label><p class="error" id="photoError"></p><button class="primary">Guardar foto</button></form>',
   );
   $('#communityPhotoForm').onsubmit = async (e) => {
@@ -340,7 +341,7 @@ async function renderAccess() {
   try {
     const s = await api('/settings');
     state.settings = s;
-    host.innerHTML = `<div class="eyebrow">Administración de la subregión</div><h1>Acceso por nivel.</h1><p class="muted">La raíz es el nivel 0. Sus aliados directos son el nivel 1, y así sucesivamente.</p><article class="core-card"><div class="community-mini">${s.hasPhoto ? `<img data-community-photo="${s.id}" alt="Foto de subregión">` : ''}<div><h2>${esc(s.name)}</h2><p>Los aliados debajo del límite seguirán registrados, aunque no podrán iniciar sesión.</p></div></div>${state.user.role === 'ROOT' ? `<form id="accessForm"><label class="check"><input type="checkbox" name="unlimited" ${s.maxLoginLevel === null ? 'checked' : ''}>Permitir acceso en todos los niveles</label><label>Nivel máximo con acceso<input name="level" required type="number" min="0" max="10000" value="${s.maxLoginLevel ?? 2}" ${s.maxLoginLevel === null ? 'disabled' : ''}></label><p class="form-note">Los cambios se aplican también a las sesiones ya abiertas. Cada aliado con acceso ve exclusivamente su propia rama.</p><p id="accessError" class="error"></p><button class="primary">Guardar permisos</button></form><br><button id="accessPhoto">Cambiar foto de subregión</button>${s.superuser ? '<hr><h2>Permisos individuales</h2><p class="muted">Busca un aliado de cualquier nivel para concederle acceso excepcional a la plataforma.</p><label>Buscar aliado<input id="individualAccessSearch" type="search" autocomplete="off" placeholder="Nombre, correo u otro dato…"></label><div id="individualAccessResults"></div>' : ''}` : `<p>Acceso permitido: ${s.maxLoginLevel === null ? 'todos los niveles' : 'hasta el nivel ' + s.maxLoginLevel}.</p>`}</article>`;
+    host.innerHTML = `<div class="eyebrow">Administración de la división</div><h1>Acceso por nivel.</h1><p class="muted">La raíz es el nivel 0. Sus aliados directos son el nivel 1, y así sucesivamente.</p><article class="core-card"><div class="community-mini">${s.hasPhoto ? `<img data-community-photo="${s.id}" alt="Foto de división">` : ''}<div><h2>${esc(s.name)}</h2><p>Los aliados debajo del límite seguirán registrados, aunque no podrán iniciar sesión.</p></div></div>${state.user.role === 'ROOT' ? `<form id="accessForm"><label class="check"><input type="checkbox" name="unlimited" ${s.maxLoginLevel === null ? 'checked' : ''}>Permitir acceso en todos los niveles</label><label>Nivel máximo con acceso<input name="level" required type="number" min="0" max="10000" value="${s.maxLoginLevel ?? 2}" ${s.maxLoginLevel === null ? 'disabled' : ''}></label><p class="form-note">Los cambios se aplican también a las sesiones ya abiertas. Cada aliado con acceso ve exclusivamente su propia rama.</p><p id="accessError" class="error"></p><button class="primary">Guardar permisos</button></form><br><button id="accessPhoto">Cambiar foto de división</button>${s.superuser ? '<hr><h2>Permisos individuales</h2><p class="muted">Busca un aliado de cualquier nivel para concederle acceso excepcional a la plataforma.</p><label>Buscar aliado<input id="individualAccessSearch" type="search" autocomplete="off" placeholder="Nombre, correo u otro dato…"></label><div id="individualAccessResults"></div>' : ''}` : `<p>Acceso permitido: ${s.maxLoginLevel === null ? 'todos los niveles' : 'hasta el nivel ' + s.maxLoginLevel}.</p>`}</article>`;
     const f = $('#accessForm');
     if (f) {
       f.elements.unlimited.onchange = () =>
@@ -403,7 +404,7 @@ async function renderDashboard(filters = '') {
   try {
     const d = await api('/dashboard' + filters);
     dashboardData = d;
-    host.innerHTML = `<div class="hero"><div><div class="eyebrow">Información de tu subregión</div><h1>Tu red, en cifras.</h1><p>Indicadores calculados sobre toda tu rama autorizada.</p></div><button id="configureDashboard" class="primary">Configurar gráficas</button></div><form id="dashboardFilters" class="dashboard-filters"><label>Desde<input type="date" name="from"></label><label>Hasta<input type="date" name="to"></label><label>Estado<select name="status"><option value="">Todos</option><option value="active">Activos</option><option value="inactive">Inactivos</option></select></label><button>Aplicar filtros</button></form><div class="dashboard-grid">${d.charts.map((c, i) => `<article class="chart-card"><div class="eyebrow">${{ count: 'Cantidad', sum: 'Suma', avg: 'Promedio' }[c.metric]}</div><h2>${esc(c.title)}</h2><strong class="chart-total">${c.total === null ? '—' : Number(c.total).toLocaleString('es-CO', { maximumFractionDigits: 2 })}</strong><p class="muted">${c.records.toLocaleString('es-CO')} registros en el filtro</p><div id="chart_${i}"></div>${c.truncated ? '<p class="muted">Se muestran las primeras 50 categorías. El indicador superior incluye todas.</p>' : ''}</article>`).join('') || '<div class="empty">Añade tu primera gráfica.</div>'}</div>`;
+    host.innerHTML = `<div class="hero"><div><div class="eyebrow">Información de tu división</div><h1>Tu red, en cifras.</h1><p>Indicadores calculados sobre toda tu rama autorizada.</p></div><button id="configureDashboard" class="primary">Configurar gráficas</button></div><form id="dashboardFilters" class="dashboard-filters"><label>Desde<input type="date" name="from"></label><label>Hasta<input type="date" name="to"></label><label>Estado<select name="status"><option value="">Todos</option><option value="active">Activos</option><option value="inactive">Inactivos</option></select></label><button>Aplicar filtros</button></form><div class="dashboard-grid">${d.charts.map((c, i) => `<article class="chart-card"><div class="eyebrow">${{ count: 'Cantidad', sum: 'Suma', avg: 'Promedio' }[c.metric]}</div><h2>${esc(c.title)}</h2><strong class="chart-total">${c.total === null ? '—' : Number(c.total).toLocaleString('es-CO', { maximumFractionDigits: 2 })}</strong><p class="muted">${c.records.toLocaleString('es-CO')} registros en el filtro</p><div id="chart_${i}"></div>${c.truncated ? '<p class="muted">Se muestran las primeras 50 categorías. El indicador superior incluye todas.</p>' : ''}</article>`).join('') || '<div class="empty">Añade tu primera gráfica.</div>'}</div>`;
     const params = new URLSearchParams(filters.replace(/^\?/, ''));
     for (const key of ['from', 'to', 'status'])
       $('#dashboardFilters').elements[key].value = params.get(key) || '';
@@ -547,9 +548,10 @@ function configureDashboard() {
 }
 
 function showCreateCommunity(result) {
+  const divisions = result.divisionLabel || divisionLabel();
   modal(
-    'Solicitar una subregión',
-    `<form id="communityRequest"><p class="form-note">Asigna una cuenta raíz independiente. La subregión quedará pendiente de aprobación.</p><label>Nombre de la subregión<input name="name" required maxlength="150"></label><fieldset><legend>Usuario raíz</legend><label>Nombre<input name="rootName" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="rootEmail" type="email" required maxlength="254" autocomplete="off"></label><label>Fecha de nacimiento<input name="rootBirthDate" type="date"></label><label>Contraseña<input name="rootPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label></fieldset>${result.superuser ? moduleInputs() : '<p>El superadministrador habilitará los submódulos.</p>'}<label>Foto de la subregión<input name="photo" type="file" accept="image/*"></label><p class="error" id="communityError"></p><div class="actions"><button class="primary">Enviar solicitud</button></div></form>`,
+    `Crear en ${divisions}`,
+    `<form id="communityRequest"><p class="form-note">Asigna una cuenta raíz independiente. La nueva división quedará pendiente de aprobación.</p><label>Nombre dentro de ${esc(divisions)}<input name="name" required maxlength="150"></label><fieldset><legend>Usuario raíz</legend><label>Nombre<input name="rootName" required maxlength="150" autocomplete="off"></label><label>Correo electrónico<input name="rootEmail" type="email" required maxlength="254" autocomplete="off"></label><label>Fecha de nacimiento<input name="rootBirthDate" type="date"></label><label>Contraseña<input name="rootPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label></fieldset>${result.superuser ? moduleInputs() : '<p>El superadministrador habilitará los submódulos.</p>'}<label>Foto de la división<input name="photo" type="file" accept="image/*"></label><p class="error" id="communityError"></p><div class="actions"><button class="primary">Enviar solicitud</button></div></form>`,
   );
   $('#communityRequest').onsubmit = async (e) => {
     e.preventDefault();
@@ -570,7 +572,7 @@ function showCreateCommunity(result) {
         ...(image.size ? { base64: await compress(image) } : {}),
       });
       $('#modal').close();
-      toast('Subregión pendiente de aprobación.');
+      toast('División pendiente de aprobación.');
       if (state.view === 'communities') await renderCommunities();
     } catch (e) {
       $('#communityError').textContent = e.message;

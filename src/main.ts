@@ -12,6 +12,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { AffiliatesController } from './affiliates/controller';
 import { mountAffiliates } from './affiliates/middleware';
 import { startBirthdayScheduler } from './affiliates/birthdays';
+import { platformDirectoriesHandler } from './affiliates/platform-directories';
 import { TenantContextManager } from './security/tenant-context.manager';
 import { AuthService, AuthGuard, TenantInterceptor } from './security/auth';
 import { SecretsService } from './security/secrets.service';
@@ -93,6 +94,7 @@ async function bootstrap() {
     .parse(process.env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: true });
   const affiliatesDb = new PrismaClient();
+  app.use('/api/platform', platformDirectoriesHandler(affiliatesDb, process.env.AFFILIATES_TENANT_ID!, process.env.AFFILIATES_APP_ID!));
   mountAffiliates(app, affiliatesDb);
   startBirthdayScheduler(affiliatesDb, process.env.AFFILIATES_TENANT_ID);
   app.useBodyParser('json', { limit: '2mb' });

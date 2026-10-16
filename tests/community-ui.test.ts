@@ -84,7 +84,7 @@ test('CSV includes subregion on every record across pages and uses selected comm
   );
   await vm.runInContext('exportCSV()', context);
   const lines = (await exported()!.text()).replace(/^\ufeff/, '').split('\r\n');
-  assert.ok(lines[0].startsWith('"Subregión";"Nombre"'));
+  assert.ok(lines[0].startsWith('"Subregiones";"Nombre"'));
   assert.equal(lines.length, 3);
   for (const line of lines.slice(1)) assert.ok(line.startsWith('"Community ""North""";'));
   assert.deepEqual(urls, [

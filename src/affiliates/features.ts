@@ -12,7 +12,7 @@ function parseModules(value: any) {
     ['access', 'dashboard', 'form'].some((key) => typeof value[key] !== 'boolean') ||
     (value.createCommunities !== undefined && typeof value.createCommunities !== 'boolean')
   )
-    fail(400, 'Selecciona los submódulos de la subregión.');
+    fail(400, 'Selecciona los submódulos de la división.');
   return {
     access: value.access,
     dashboard: value.dashboard,
@@ -22,7 +22,7 @@ function parseModules(value: any) {
 }
 function requireModule(n: any, key: keyof typeof defaultModules) {
   if (!n.platformRoot && n.modules?.[key] === false)
-    fail(403, 'Este submódulo no está habilitado para la subregión.');
+    fail(403, 'Este submódulo no está habilitado para la división.');
 }
 import type { AffiliatesStore } from './store';
 import { createForm, mirrorMember } from './store';
@@ -151,7 +151,9 @@ export class NetworkFeatures {
     return this.store.tx(
       async (tx, n) => {
         if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
-          fail(403, 'Solo el superadministrador exporta todas las subregiones.');
+          fail(403, 'Solo el superadministrador exporta todas las divisiones.');
+        const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { divisionLabel: true } });
+        const divisionLabel = directory?.divisionLabel || 'Subregiones';
         const networks = await tx.affiliateNetwork.findMany({
           where: { tenantId: n.tenantId },
           select: { id: true, name: true, fields: true },
@@ -183,8 +185,8 @@ export class NetworkFeatures {
         await write(
           '\ufeff' +
             csvLine([
-              'Subregión',
-              'ID subregión',
+              divisionLabel,
+              `ID ${divisionLabel}`,
               'ID aliado',
               'Nombre',
               'Correo',
@@ -294,15 +296,15 @@ export class NetworkFeatures {
   ) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT')
-        fail(403, 'Solo el superadministrador consulta árboles de otras subregiones.');
+        fail(403, 'Solo el superadministrador consulta árboles de otras divisiones.');
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target) fail(404, 'Subregión no disponible.');
+      if (!target) fail(404, 'División no disponible.');
       const root = await tx.affiliateMember.findFirst({
         where: { networkId: target.id, tenantId: n.tenantId, role: 'ROOT', parentId: null },
       });
-      if (!root) fail(404, 'La subregión no tiene una cuenta raíz.');
+      if (!root) fail(404, 'La división no tiene una cuenta raíz.');
       const features = new NetworkFeatures({ tx: (fn: any) => fn(tx, target) } as AffiliatesStore);
       if (memberId) {
         const member = await features.visible(root.id, memberId);
@@ -328,7 +330,7 @@ export class NetworkFeatures {
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target) fail(404, 'Subregión no disponible para configurar submódulos.');
+      if (!target) fail(404, 'División no disponible para configurar submódulos.');
       const modules = parseModules(b.modules);
       await tx.affiliateNetwork.update({ where: { id }, data: { modules } });
       await this.audit(tx, me.id, 'community.modules.updated', id, { modules });
@@ -341,8 +343,8 @@ export class NetworkFeatures {
         fail(
           403,
           n.approvalStatus === 'PENDING'
-            ? 'La subregión está pendiente de aprobación.'
-            : 'La subregión no está habilitada.',
+            ? 'La división está pendiente de aprobación.'
+            : 'La división no está habilitada.',
         );
       const member = await tx.affiliateMember.findFirst({
         where: { id: uuid(id), networkId: n.id },
@@ -364,7 +366,7 @@ export class NetworkFeatures {
           where: { id: uuid(id), tenantId: n.tenantId },
         });
         if (!target)
-          fail(403, 'Subregión no disponible para cambiar su raíz.');
+          fail(403, 'División no disponible para cambiar su raíz.');
         const input = b?.root;
         if (
           !input ||
@@ -385,13 +387,13 @@ export class NetworkFeatures {
         const root = await tx.affiliateMember.findFirst({
           where: { tenantId: n.tenantId, networkId: target.id, role: 'ROOT', parentId: null },
         });
-        if (!root) fail(404, 'No se encontró el usuario raíz de esta subregión.');
+        if (!root) fail(404, 'No se encontró el usuario raíz de esta división.');
         const email = input.email.trim().toLowerCase();
         const duplicate = await tx.affiliateMember.findFirst({
           where: { tenantId: n.tenantId, networkId: target.id, email, id: { not: root.id } },
           select: { id: true },
         });
-        if (duplicate) fail(409, 'Ese correo ya pertenece a otro aliado de la subregión.');
+        if (duplicate) fail(409, 'Ese correo ya pertenece a otro aliado de la división.');
         const salt = randomBytes(16).toString('hex');
         const password =
           salt + ':' + ((await hashPassword(input.password, salt, 64)) as Buffer).toString('hex');
@@ -412,18 +414,18 @@ export class NetworkFeatures {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        fail(409, 'Ese correo ya pertenece a otro aliado de la subregión.');
+        fail(409, 'Ese correo ya pertenece a otro aliado de la división.');
       throw error;
     }
   }
   async renameCommunity(me: any, id: string, b: any) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT')
-        fail(403, 'Solo el superadministrador cambia el nombre de las subregiones.');
+        fail(403, 'Solo el superadministrador cambia el nombre de las divisiones.');
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target) fail(404, 'Subregión no disponible.');
+      if (!target) fail(404, 'División no disponible.');
       if (typeof b?.name !== 'string' || !b.name.trim() || b.name.trim().length > 150)
         fail(400, 'Escribe un nombre válido de máximo 150 caracteres.');
       const name = b.name.trim();
@@ -567,6 +569,7 @@ export class NetworkFeatures {
         await this.audit(tx, me.id, 'community.access.updated', n.id, { maxLoginLevel: limit });
         n.maxLoginLevel = limit;
       }
+      const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true } });
       return {
         id: n.id,
         name: n.name,
@@ -577,6 +580,8 @@ export class NetworkFeatures {
           : { ...defaultModules, ...n.modules },
         superuser: this.store.isCommunityAdmin || (me.role === 'ROOT' && n.platformRoot),
         hasPhoto: !!n.photo,
+        directory: directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano' },
+        platformAdministrator: this.store.isPlatformAdministrator,
       };
     });
   }
@@ -622,6 +627,7 @@ export class NetworkFeatures {
       const images = new Map(photos.map((p) => [p.id, p.present]));
       return {
         superuser,
+        divisionLabel: (await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { divisionLabel: true } }))?.divisionLabel || 'Subregiones',
         canCreate:
           me.role === 'ROOT' && (superuser || (n.modules as any)?.createCommunities === true),
         communities: rows.map(({ members, ...c }) => ({
@@ -640,7 +646,7 @@ export class NetworkFeatures {
   }
   async requestCommunity(me: any, b: any) {
     if (typeof b.name !== 'string' || !b.name.trim() || b.name.length > 150)
-      fail(400, 'Escribe el nombre de la subregión (máximo 150 caracteres).');
+      fail(400, 'Escribe el nombre de la división (máximo 150 caracteres).');
     const rootInput = b.root;
     if (
       !rootInput ||
@@ -673,7 +679,7 @@ export class NetworkFeatures {
         me.role !== 'ROOT' ||
         (!this.store.isCommunityAdmin && !n.platformRoot && n.modules?.createCommunities !== true)
       )
-        fail(403, 'Tu subregión no tiene permiso para crear subregiones.');
+        fail(403, 'Tu división no tiene permiso para crear divisiones.');
       if (
         !(this.store.isCommunityAdmin || (n.platformRoot && me.role === 'ROOT')) &&
         Object.values(modules).some((enabled) => enabled)
@@ -727,15 +733,15 @@ export class NetworkFeatures {
   async deleteCommunity(me: any, id: string, b: any) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT' || this.store.isCommunityAdmin)
-        fail(403, 'Solo el superusuario puede eliminar subregiones.');
+        fail(403, 'Solo el superusuario puede eliminar divisiones.');
       uuid(id);
       await tx.$queryRaw`SELECT id FROM "AffiliateNetwork" WHERE id=${id}::uuid AND "tenantId"=${n.tenantId}::uuid FOR UPDATE`;
       const target = await tx.affiliateNetwork.findFirst({ where: { id, tenantId: n.tenantId } });
-      if (!target) fail(404, 'Subregión no disponible.');
+      if (!target) fail(404, 'División no disponible.');
       if (target.platformRoot || target.id === n.id)
-        fail(403, 'No se puede eliminar la subregión del superusuario.');
+        fail(403, 'No se puede eliminar la división del superusuario.');
       if (typeof b?.confirmName !== 'string' || b.confirmName !== target.name)
-        fail(400, 'Escribe el nombre exacto de la subregión para confirmar la eliminación.');
+        fail(400, 'Escribe el nombre exacto de la división para confirmar la eliminación.');
       const members = await tx.affiliateMember.count({
         where: { networkId: id, tenantId: n.tenantId },
       });
@@ -753,12 +759,12 @@ export class NetworkFeatures {
   async review(me: any, id: string, b: any) {
     return this.store.tx(async (tx, n) => {
       if (!n.platformRoot || me.role !== 'ROOT')
-        fail(403, 'Solo el superusuario aprueba subregiones.');
+        fail(403, 'Solo el superusuario aprueba divisiones.');
       if (!['APPROVED', 'REJECTED', 'SUSPENDED'].includes(b.status)) fail(400, 'Estado inválido.');
       const target = await tx.affiliateNetwork.findFirst({
         where: { id: uuid(id), tenantId: n.tenantId },
       });
-      if (!target) fail(404, 'Subregión no disponible.');
+      if (!target) fail(404, 'División no disponible.');
       const note = String(b.note || '')
         .trim()
         .slice(0, 500);
@@ -791,7 +797,7 @@ export class NetworkFeatures {
           (n.platformRoot && me.role === 'ROOT')
         )
       )
-        fail(404, 'Subregión no disponible.');
+        fail(404, 'División no disponible.');
       if (base64 !== undefined) {
         if (!(n.platformRoot && me.role === 'ROOT')) requireModule(target, 'access');
         if (
@@ -799,12 +805,12 @@ export class NetworkFeatures {
           !(target.id === n.id && me.role === 'ROOT') &&
           target.requestedBy !== me.id
         )
-          fail(403, 'No puedes editar esta subregión.');
+          fail(403, 'No puedes editar esta división.');
         await tx.affiliateNetwork.update({ where: { id }, data: photo(base64) });
         await this.audit(tx, me.id, 'community.photo.updated', id, {});
         return { ok: true };
       }
-      if (!target.photo) fail(404, 'La subregión no tiene foto.');
+      if (!target.photo) fail(404, 'La división no tiene foto.');
       return { bytes: target.photo, mime: target.photoMime };
     });
   }
