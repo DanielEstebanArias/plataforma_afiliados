@@ -1,0 +1,5 @@
+ALTER TABLE "PlatformDirectory"
+  ADD COLUMN "primaryColor" TEXT NOT NULL DEFAULT '#073d34',
+  ADD COLUMN "secondaryColor" TEXT NOT NULL DEFAULT '#032d27',
+  ADD COLUMN "accentColor" TEXT NOT NULL DEFAULT '#c8f000',
+  ADD COLUMN "backgroundColor" TEXT NOT NULL DEFAULT '#f5f8f5';

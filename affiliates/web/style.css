@@ -14,6 +14,8 @@
   --brand-muted: #657d74;
   --brand-line: #dce7e1;
   --brand-surface: #f5f8f5;
+  --brand-on-primary: #ffffff;
+  --brand-on-accent: #123a32;
   color: var(--brand-ink);
   background: var(--brand-surface);
   font-synthesis: none;
@@ -45,7 +47,7 @@ button:hover {
 }
 button.primary {
   background: var(--brand-forest);
-  color: var(--brand-white);
+  color: var(--brand-on-primary);
   box-shadow: inset 0 -2px 0 #032d2738;
 }
 button.primary:hover {

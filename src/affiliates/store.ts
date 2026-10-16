@@ -76,9 +76,9 @@ export class AffiliatesStore {
   async directoryBranding() {
     const directory = await this.prisma.platformDirectory.findUnique({
       where: { tenantId: this.tenantId },
-      select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true, status: true },
+      select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true, primaryColor: true, secondaryColor: true, accentColor: true, backgroundColor: true, status: true },
     });
-    return directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', status: 'ACTIVE' };
+    return directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', primaryColor: '#073d34', secondaryColor: '#032d27', accentColor: '#c8f000', backgroundColor: '#f5f8f5', status: 'ACTIVE' };
   }
   async loginCandidates(email: string) {
     return this.tx(async (tx, n) => {

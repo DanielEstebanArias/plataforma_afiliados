@@ -47,6 +47,10 @@ const cleanText = (value: unknown, label: string, max = 150) => {
     fail(400, `${label} no es válido.`);
   return text;
 };
+const cleanColor = (value: unknown, label: string) => {
+  if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) fail(400, `${label} no es válido.`);
+  return (value as string).toLowerCase();
+};
 
 export function platformDirectoriesHandler(
   prisma: PrismaClient,
@@ -118,6 +122,10 @@ export function platformDirectoriesHandler(
         const name = cleanText(body.name, 'El nombre del directorio');
         const slogan = cleanText(body.slogan, 'El eslogan', 200);
         const divisionLabel = cleanText(body.divisionLabel, 'El nombre de las divisiones', 80);
+        const primaryColor = cleanColor(body.primaryColor, 'El color principal');
+        const secondaryColor = cleanColor(body.secondaryColor, 'El color secundario');
+        const accentColor = cleanColor(body.accentColor, 'El color de acento');
+        const backgroundColor = cleanColor(body.backgroundColor, 'El color de fondo');
         const primaryDivisionName = cleanText(body.primaryDivisionName, 'El nombre de la división principal');
         const adminName = cleanText(body.adminName, 'El nombre del superadministrador');
         const adminEmail = String(body.adminEmail || '').trim().toLowerCase();
@@ -146,12 +154,13 @@ export function platformDirectoriesHandler(
           await mirrorMember(tx, network, root);
           await tx.platformDirectory.create({ data: {
             tenantId, rootAppId: appId, name, slogan, divisionLabel,
+            primaryColor, secondaryColor, accentColor, backgroundColor,
             directoryAdminName: adminName, directoryAdminEmail: adminEmail,
             createdBy: administrator.id,
           }});
           await tx.platformAuditLog.create({ data: {
             administratorId: administrator.id, action: 'directory.created', directoryId: tenantId,
-            details: { name, slogan, divisionLabel, primaryDivisionName, directoryAdminEmail: adminEmail },
+            details: { name, slogan, divisionLabel, primaryDivisionName, directoryAdminEmail: adminEmail, primaryColor, secondaryColor, accentColor, backgroundColor },
           }});
         }, { timeout: 30_000 });
         return send({ ok: true, id: tenantId }, 201);
@@ -165,6 +174,10 @@ export function platformDirectoriesHandler(
         const name = cleanText(body.name, 'El nombre del directorio');
         const slogan = cleanText(body.slogan, 'El eslogan', 200);
         const divisionLabel = cleanText(body.divisionLabel, 'El nombre de las divisiones', 80);
+        const primaryColor = cleanColor(body.primaryColor, 'El color principal');
+        const secondaryColor = cleanColor(body.secondaryColor, 'El color secundario');
+        const accentColor = cleanColor(body.accentColor, 'El color de acento');
+        const backgroundColor = cleanColor(body.backgroundColor, 'El color de fondo');
         const primaryDivisionName = cleanText(body.primaryDivisionName, 'El nombre de la división principal');
         const adminName = cleanText(body.adminName, 'El nombre del superadministrador');
         const adminEmail = String(body.adminEmail || '').trim().toLowerCase();
@@ -189,11 +202,12 @@ export function platformDirectoriesHandler(
             tenantId: targetDirectory.tenantId, networkId: network.id, memberId: root.id,
           }});
           await tx.platformDirectory.update({ where: { id: targetDirectory.id }, data: {
-            name, slogan, divisionLabel, directoryAdminName: adminName, directoryAdminEmail: adminEmail,
+            name, slogan, divisionLabel, primaryColor, secondaryColor, accentColor, backgroundColor,
+            directoryAdminName: adminName, directoryAdminEmail: adminEmail,
           }});
           await tx.platformAuditLog.create({ data: {
             administratorId: administrator.id, action: 'directory.updated', directoryId: targetDirectory.id,
-            details: { name, slogan, divisionLabel, primaryDivisionName, directoryAdminEmail: adminEmail, passwordChanged: !!password },
+            details: { name, slogan, divisionLabel, primaryDivisionName, directoryAdminEmail: adminEmail, primaryColor, secondaryColor, accentColor, backgroundColor, passwordChanged: !!password },
           }});
         }, { timeout: 30_000 });
         return send({ ok: true });

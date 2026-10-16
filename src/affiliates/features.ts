@@ -569,7 +569,7 @@ export class NetworkFeatures {
         await this.audit(tx, me.id, 'community.access.updated', n.id, { maxLoginLevel: limit });
         n.maxLoginLevel = limit;
       }
-      const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true } });
+      const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: n.tenantId }, select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true, primaryColor: true, secondaryColor: true, accentColor: true, backgroundColor: true } });
       return {
         id: n.id,
         name: n.name,
@@ -580,7 +580,7 @@ export class NetworkFeatures {
           : { ...defaultModules, ...n.modules },
         superuser: this.store.isCommunityAdmin || (me.role === 'ROOT' && n.platformRoot),
         hasPhoto: !!n.photo,
-        directory: directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano' },
+        directory: directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', primaryColor: '#073d34', secondaryColor: '#032d27', accentColor: '#c8f000', backgroundColor: '#f5f8f5' },
         platformAdministrator: this.store.isPlatformAdministrator,
       };
     });
