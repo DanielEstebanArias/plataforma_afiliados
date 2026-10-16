@@ -5,9 +5,12 @@ import fs from 'node:fs';
 test('platform directory schema isolates global administration from tenant data', () => {
   const schema = fs.readFileSync('prisma/schema.prisma', 'utf8');
   const migration = fs.readFileSync('prisma/migrations/202610160001_platform_directories/migration.sql', 'utf8');
+  const colorsMigration = fs.readFileSync('prisma/migrations/202610160002_directory_colors/migration.sql', 'utf8');
   assert.match(schema, /model PlatformAdministrator/);
   assert.match(schema, /model PlatformDirectory/);
   assert.match(schema, /divisionLabel\s+String/);
+  assert.match(schema, /primaryColor\s+String\s+@default\("#073d34"\)/);
+  assert.match(colorsMigration, /"accentColor"/);
   assert.match(schema, /platformAdminId String\?/);
   assert.match(migration, /"PlatformAuditLog"/);
   assert.match(migration, /REVOKE UPDATE,DELETE ON "PlatformAuditLog"/);
@@ -41,8 +44,18 @@ test('directory UI exposes configurable division labels and destructive confirma
   assert.match(ui, /Administrar directorio/);
   assert.match(ui, /editDirectory/);
   assert.match(ui, /Nueva contraseña, opcional/);
+  assert.match(ui, /name="primaryColor"/);
+  assert.match(ui, /Copiar enlace/);
+  assert.match(ui, /navigator\.share/);
   assert.match(app, /divisionLabel\(\)/);
+  assert.match(app, /applyDirectoryTheme/);
   assert.match(app, /Superadministrador de directorio/);
+});
+
+test('division heading uses only the configured name', () => {
+  const features = fs.readFileSync('affiliates/web/features-ui.js', 'utf8');
+  assert.match(features, /<h1>\$\{esc\(divisions\)\}<\/h1>/);
+  assert.doesNotMatch(features, /que crecen|Las nuevas divisiones necesitan/);
 });
 
 test('directory editing keeps branding, primary division and root account synchronized', () => {

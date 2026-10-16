@@ -73,6 +73,10 @@ model PlatformDirectory {
   name           String
   slogan         String
   divisionLabel  String   @default("Subregiones")
+  primaryColor   String   @default("#073d34")
+  secondaryColor String   @default("#032d27")
+  accentColor    String   @default("#c8f000")
+  backgroundColor String  @default("#f5f8f5")
   directoryAdminName String
   directoryAdminEmail String
   status         String   @default("ACTIVE")

@@ -9,8 +9,26 @@ let state = { members: [], view: 'tree', query: '' },
   nativeToken = '',
   apiBase = '',
   installPrompt;
-let directoryBranding = { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano' };
+let directoryBranding = { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', primaryColor: '#073d34', secondaryColor: '#032d27', accentColor: '#c8f000', backgroundColor: '#f5f8f5' };
 const divisionLabel = () => directoryBranding.divisionLabel || 'Subregiones';
+function colorContrast(hex) {
+  const rgb = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
+  const luminance = rgb.map((channel) => { const value = channel / 255; return value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; }).reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index], 0);
+  return luminance > .48 ? '#123a32' : '#ffffff';
+}
+function applyDirectoryTheme(directory = directoryBranding) {
+  const defaults = { primaryColor: '#073d34', secondaryColor: '#032d27', accentColor: '#c8f000', backgroundColor: '#f5f8f5' }, root = document.documentElement;
+  for (const [key, fallback] of Object.entries(defaults)) if (!/^#[0-9a-f]{6}$/i.test(directory[key] || '')) directory[key] = fallback;
+  if (!root?.style) return;
+  root.style.setProperty('--brand-forest', directory.primaryColor);
+  root.style.setProperty('--brand-forest-deep', directory.secondaryColor);
+  root.style.setProperty('--brand-lime', directory.accentColor);
+  root.style.setProperty('--brand-surface', directory.backgroundColor);
+  root.style.setProperty('--brand-on-primary', colorContrast(directory.primaryColor));
+  root.style.setProperty('--brand-on-accent', colorContrast(directory.accentColor));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', directory.primaryColor);
+  document.title = directory.name || 'Aliados por Antioquia';
+}
 const native = !!window.Capacitor?.isNativePlatform?.();
 function scopedRoute(route) {
   if (
@@ -108,6 +126,7 @@ async function platformLogos() {
 }
 function auth(configured, directory) {
   if (directory) directoryBranding = { ...directoryBranding, ...directory };
+  applyDirectoryTheme();
   $('#app').innerHTML =
     `<main class="auth"><section class="auth-intro">${brand()}<span class="eyebrow">${esc(directoryBranding.name)}</span><h1>Toda tu información<br>en un solo lugar.</h1><div class="campaign-slogan">${esc(directoryBranding.slogan)}</div><p>Personas, relaciones e información en un solo lugar.</p><div class="auth-art"><span>Árbol de aliados</span><span>Formularios a tu medida</span><span>Acceso por rama</span></div></section><section class="auth-form"><form id="authForm"><div class="eyebrow">${configured ? 'Bienvenido de nuevo' : 'Comienza tu red'}</div><h2>${configured ? 'Ingresa a tu organización' : 'Crea tu entidad raíz'}</h2><p class="muted">${configured ? 'Accede con la cuenta que te asignó tu organización.' : 'Esta cuenta administrará toda la red y configurará el formulario de aliados.'}</p>${configured ? '' : '<label>Nombre de la entidad<input name="organization" required maxlength="150" placeholder="Mi organización"></label><label>Tu nombre<input name="name" required maxlength="150" autocomplete="name"></label>'}<label>Correo electrónico<input name="email" type="email" required autocomplete="username"></label><label>Contraseña<input name="password" type="password" minlength="10" maxlength="200" required autocomplete="${configured ? 'current-password' : 'new-password'}" placeholder="Mínimo 10 caracteres"></label><p class="error" id="authError"></p><button class="primary">${configured ? 'Ingresar →' : 'Crear organización →'}</button>${configured ? '<button type="button" class="button-link recovery-link" id="forgotPassword">¿Olvidaste tu contraseña?</button><a class="button-link recovery-link" href="/platform.html">Administración global de directorios</a>' : ''}<p class="footnote">Datos guardados en la base de esta instalación. ${configured ? '' : 'Puedes añadir aliados después de crear tu cuenta.'}</p></form></section></main>`;
   platformLogos();
@@ -189,6 +208,7 @@ async function load() {
     const settings = await api('/settings');
     state.settings = settings;
     directoryBranding = { ...directoryBranding, ...(settings.directory || {}) };
+    applyDirectoryTheme();
     if (settings.superuser) {
       if (selected) {
         await openCommunityTree(selected);
@@ -709,6 +729,7 @@ async function start() {
     }
     const status = await api('/status');
     if (status.directory) directoryBranding = { ...directoryBranding, ...status.directory };
+    applyDirectoryTheme();
     try {
       await load();
     } catch (error) {

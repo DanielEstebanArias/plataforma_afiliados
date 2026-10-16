@@ -41,6 +41,8 @@ function main(){
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610150002_password_recovery/migration.sql','utf8')+'\nCOMMIT;');
  if(!sql(`SELECT to_regclass('public."PlatformDirectory"');`))
   sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610160001_platform_directories/migration.sql','utf8')+'\nCOMMIT;');
+ if(!sql(`SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='PlatformDirectory' AND column_name='primaryColor';`))
+  sql('BEGIN;\n'+fs.readFileSync('prisma/migrations/202610160002_directory_colors/migration.sql','utf8')+'\nCOMMIT;');
  const tenantId=process.env.AFFILIATES_TENANT_ID,appId=process.env.AFFILIATES_APP_ID;
  if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(tenantId||'')||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(appId||''))
   throw new Error('Configura AFFILIATES_TENANT_ID y AFFILIATES_APP_ID para registrar el Directorio de Antioquia.');
