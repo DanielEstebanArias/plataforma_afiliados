@@ -221,7 +221,7 @@ function createApp(
             fail(401, 'Correo o contraseña incorrectos.');
           let loginDb = db, redirectUrl, loginCookieName = cookieName, loginCookiePath = cookiePath;
           let m;
-          if (db.loginCandidates && !req.baseUrl) {
+          if (db.loginCandidates) {
             const candidates = await db.loginCandidates(String(b.email || '').trim().toLowerCase());
             const matches = [];
             for (const candidate of candidates) {

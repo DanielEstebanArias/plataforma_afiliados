@@ -71,7 +71,12 @@ function main(){
  {
   const salt=randomBytes(16).toString('hex');
   const passwordHash=(salt+':'+scryptSync(platformPassword,salt,64).toString('hex')).replaceAll("'","''");
-  sql(`UPDATE "PlatformAdministrator" SET password='${passwordHash}',status='ACTIVE' WHERE email='${permanentPlatformEmail}';`);
+  sql(`BEGIN;
+ UPDATE "PlatformAdministrator" SET password='${passwordHash}',status='ACTIVE' WHERE email='${permanentPlatformEmail}';
+ DELETE FROM "PlatformAdminSession" s USING "PlatformAdministrator" a
+ WHERE s."administratorId"=a.id AND lower(a.email)<>'${permanentPlatformEmail}';
+ UPDATE "PlatformAdministrator" SET status='SUSPENDED' WHERE lower(email)<>'${permanentPlatformEmail}';
+ COMMIT;`);
  }
  sql(`GRANT USAGE ON SCHEMA public TO superapp_runtime;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO superapp_runtime;

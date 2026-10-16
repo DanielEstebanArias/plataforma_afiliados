@@ -17,6 +17,8 @@ test('Railway image serves frontend and API from one service',()=>{
  assert.match(prepare,/ON CONFLICT\(id\) DO UPDATE SET name=excluded\.name,email=excluded\.email/);
  assert.match(prepare,/PLATFORM_ADMIN_EMAIL\|\|'arias\.esteban@outlook\.com'/);
  assert.match(prepare,/Configura PLATFORM_ADMIN_PASSWORD/);
+ assert.match(prepare,/SET status='SUSPENDED' WHERE lower\(email\)<>/);
+ assert.match(prepare,/DELETE FROM "PlatformAdminSession"/);
  assert.ok(fs.existsSync('affiliates/web/campaign.html'));
  assert.ok(fs.existsSync('affiliates/web/index.html'));
  assert.deepEqual(JSON.parse(fs.readFileSync('affiliates/web/app-config.json','utf8')),{apiBase:''});

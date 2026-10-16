@@ -8,6 +8,78 @@ import { AffiliateCampaigns } from './campaigns';
 import { AffiliatePasswordRecovery } from './password-recovery';
 
 type Field = { id: string; label: string; type: string; required: boolean; options?: string[] };
+const fail = (status: number, message: string): never => {
+  throw Object.assign(new Error(message), { status });
+};
+const normalizedIdentity = (value: unknown) =>
+  typeof value === 'string'
+    ? value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+    : '';
+const documentField = (field: Field) => {
+  const identity = normalizedIdentity(field.id),
+    label = normalizedIdentity(field.label);
+  return (
+    identity === 'documentnumber' ||
+    identity === 'numerocedula' ||
+    identity === 'cedula' ||
+    label.includes('cedula')
+  );
+};
+export async function assertDirectoryIdentityAvailable(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  fields: Field[],
+  emailValue: unknown,
+  data: Record<string, unknown>,
+  exclude: { memberId?: string; campaignEntryId?: string } = {},
+) {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
+  const email = typeof emailValue === 'string' ? emailValue.trim().toLowerCase() : '';
+  if (email) {
+    const [member, entry] = await Promise.all([
+      tx.affiliateMember.findFirst({
+        where: { tenantId, email, ...(exclude.memberId ? { id: { not: exclude.memberId } } : {}) },
+        select: { id: true },
+      }),
+      tx.affiliateCampaignEntry.findFirst({
+        where: {
+          tenantId,
+          email,
+          ...(exclude.campaignEntryId ? { id: { not: exclude.campaignEntryId } } : {}),
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (member || entry) fail(409, 'Este correo electrónico ya está registrado en otra división.');
+  }
+  const field = fields.find(documentField),
+    document = field ? normalizedIdentity(data[field.id]) : '';
+  if (!document) return;
+  const duplicate = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+    SELECT m.id::text FROM "AffiliateMember" m
+    JOIN "AffiliateNetwork" n ON n.id=m."networkId" AND n."tenantId"=m."tenantId"
+    CROSS JOIN LATERAL jsonb_array_elements(n.fields) f
+    WHERE m."tenantId"=${tenantId}::uuid
+      AND (${exclude.memberId || null}::uuid IS NULL OR m.id<>${exclude.memberId || null}::uuid)
+      AND (regexp_replace(lower(f->>'id'),'[^a-z0-9]','','g') IN ('documentnumber','numerocedula','cedula')
+           OR translate(lower(f->>'label'),'áéíóúüñ','aeiouun') LIKE '%cedula%')
+      AND regexp_replace(lower(COALESCE(m.data->>(f->>'id'),'')),'[^a-z0-9]','','g')=${document}
+    UNION ALL
+    SELECT e.id::text FROM "AffiliateCampaignEntry" e
+    JOIN "AffiliateNetwork" n ON n.id=e."networkId" AND n."tenantId"=e."tenantId"
+    CROSS JOIN LATERAL jsonb_array_elements(n.fields) f
+    WHERE e."tenantId"=${tenantId}::uuid
+      AND (${exclude.campaignEntryId || null}::uuid IS NULL OR e.id<>${exclude.campaignEntryId || null}::uuid)
+      AND (regexp_replace(lower(f->>'id'),'[^a-z0-9]','','g') IN ('documentnumber','numerocedula','cedula')
+           OR translate(lower(f->>'label'),'áéíóúüñ','aeiouun') LIKE '%cedula%')
+      AND regexp_replace(lower(COALESCE(e.data->>(f->>'id'),'')),'[^a-z0-9]','','g')=${document}
+    LIMIT 1`);
+  if (duplicate.length) fail(409, 'Este número de cédula ya está registrado en otra división.');
+}
 export const column = (id: string) =>
   'custom_' + createHash('sha256').update(id).digest('hex').slice(0, 16);
 export function coreFields(fields: Field[]) {
@@ -76,9 +148,31 @@ export class AffiliatesStore {
   async directoryBranding() {
     const directory = await this.prisma.platformDirectory.findUnique({
       where: { tenantId: this.tenantId },
-      select: { name: true, slogan: true, divisionLabel: true, directoryAdminName: true, primaryColor: true, secondaryColor: true, accentColor: true, backgroundColor: true, status: true },
+      select: {
+        name: true,
+        slogan: true,
+        divisionLabel: true,
+        directoryAdminName: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        backgroundColor: true,
+        status: true,
+      },
     });
-    return directory || { name: 'Directorio de Antioquia', slogan: 'Por Antioquia ¡Lo que sea!', divisionLabel: 'Subregiones', directoryAdminName: 'José Ignacio Cano', primaryColor: '#073d34', secondaryColor: '#032d27', accentColor: '#c8f000', backgroundColor: '#f5f8f5', status: 'ACTIVE' };
+    return (
+      directory || {
+        name: 'Directorio de Antioquia',
+        slogan: 'Por Antioquia ¡Lo que sea!',
+        divisionLabel: 'Subregiones',
+        directoryAdminName: 'José Ignacio Cano',
+        primaryColor: '#073d34',
+        secondaryColor: '#032d27',
+        accentColor: '#c8f000',
+        backgroundColor: '#f5f8f5',
+        status: 'ACTIVE',
+      }
+    );
   }
   async loginCandidates(email: string) {
     return this.tx(async (tx, n) => {
@@ -171,7 +265,10 @@ export class AffiliatesStore {
     return this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.tenant_id',${this.tenantId},true)`;
-        const directory = await (tx as any).platformDirectory?.findUnique({ where: { tenantId: this.tenantId }, select: { status: true } });
+        const directory = await (tx as any).platformDirectory?.findUnique({
+          where: { tenantId: this.tenantId },
+          select: { status: true },
+        });
         if (directory?.status === 'ARCHIVED')
           throw Object.assign(new Error('Este directorio está archivado.'), { status: 403 });
         const n = await tx.affiliateNetwork.findUnique({
@@ -233,7 +330,13 @@ export class AffiliatesStore {
           where: { ...scope, token: p[0], expires: { gt: BigInt(p[1]) } },
         });
         return (
-          s && { token: s.token, member_id: s.memberId, csrf: s.csrf, expires: Number(s.expires), platform_admin_id: s.platformAdminId }
+          s && {
+            token: s.token,
+            member_id: s.memberId,
+            csrf: s.csrf,
+            expires: Number(s.expires),
+            platform_admin_id: s.platformAdminId,
+          }
         );
       }
       if (q === 'INSERT INTO sessions VALUES(?,?,?,?)')
@@ -273,6 +376,14 @@ export class AffiliatesStore {
       }
       let m: any;
       if (q.startsWith('INSERT INTO members(') && q.includes("'MEMBER'")) {
+        const memberData = JSON.parse(p[5]);
+        await assertDirectoryIdentityAvailable(
+          tx,
+          this.tenantId,
+          n.fields as Field[],
+          p[3],
+          memberData,
+        );
         m = await tx.affiliateMember.create({
           data: {
             ...scope,
@@ -282,14 +393,23 @@ export class AffiliatesStore {
             email: p[3],
             password: p[4],
             role: 'MEMBER',
-            data: JSON.parse(p[5]),
+            data: memberData,
             createdAt: new Date(p[6]),
           },
         });
       } else if (q === 'UPDATE members SET name=?,email=?,data=?,status=? WHERE id=?') {
+        const memberData = JSON.parse(p[2]);
+        await assertDirectoryIdentityAvailable(
+          tx,
+          this.tenantId,
+          n.fields as Field[],
+          p[1],
+          memberData,
+          { memberId: p[4] },
+        );
         m = await tx.affiliateMember.update({
           where: { tenantId_networkId_id: { ...scope, id: p[4] } },
-          data: { name: p[0], email: p[1], data: JSON.parse(p[2]), status: p[3] },
+          data: { name: p[0], email: p[1], data: memberData, status: p[3] },
         });
       } else if (q === 'UPDATE members SET photo=?,mime=? WHERE id=?') {
         m = await tx.affiliateMember.update({
