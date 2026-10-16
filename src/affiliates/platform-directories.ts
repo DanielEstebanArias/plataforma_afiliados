@@ -104,9 +104,14 @@ export function platformDirectoriesHandler(
         return send({ administrator: { id: administrator.id, name: administrator.name, email: administrator.email }, csrf: activeSession.csrf });
       if (path === '/directories' && method === 'GET') {
         const directories = await prisma.platformDirectory.findMany({ orderBy: [{ status: 'asc' }, { name: 'asc' }] });
-        return send({ directories: directories.map((directory) => ({
-          ...directory, id: directory.id, url: `/affiliates/${directory.tenantId}/${directory.rootAppId}/`,
-        })) });
+        const enriched = await Promise.all(directories.map(async (directory) => {
+          const primaryDivisionName = await prisma.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT set_config('app.tenant_id',${directory.tenantId},true)`;
+            return (await tx.app.findUnique({ where: { tenantId_id: { tenantId: directory.tenantId, id: directory.rootAppId } }, select: { name: true } }))?.name || '';
+          });
+          return { ...directory, id: directory.id, primaryDivisionName, url: `/affiliates/${directory.tenantId}/${directory.rootAppId}/` };
+        }));
+        return send({ directories: enriched });
       }
       if (path === '/directories' && method === 'POST') {
         const body = await requestBody(req);
@@ -150,6 +155,48 @@ export function platformDirectoriesHandler(
           }});
         }, { timeout: 30_000 });
         return send({ ok: true, id: tenantId }, 201);
+      }
+      const editMatch = path.match(/^\/directories\/([^/]+)$/);
+      if (editMatch && method === 'PUT') {
+        if (!uuidPattern.test(editMatch[1])) fail(400, 'Directorio inválido.');
+        const directory = await prisma.platformDirectory.findUnique({ where: { id: editMatch[1] } });
+        if (!directory) fail(404, 'Directorio no disponible.');
+        const body = await requestBody(req);
+        const name = cleanText(body.name, 'El nombre del directorio');
+        const slogan = cleanText(body.slogan, 'El eslogan', 200);
+        const divisionLabel = cleanText(body.divisionLabel, 'El nombre de las divisiones', 80);
+        const primaryDivisionName = cleanText(body.primaryDivisionName, 'El nombre de la división principal');
+        const adminName = cleanText(body.adminName, 'El nombre del superadministrador');
+        const adminEmail = String(body.adminEmail || '').trim().toLowerCase();
+        if (!emailPattern.test(adminEmail) || adminEmail.length > 254) fail(400, 'El correo del superadministrador no es válido.');
+        if (body.adminPassword !== undefined && typeof body.adminPassword !== 'string') fail(400, 'La contraseña no es válida.');
+        const password = body.adminPassword ? await passwordHash(body.adminPassword) : undefined;
+        const targetDirectory = directory!;
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.tenant_id',${targetDirectory.tenantId},true)`;
+          const network = await tx.affiliateNetwork.findUniqueOrThrow({ where: { appId: targetDirectory.rootAppId } });
+          const root = await tx.affiliateMember.findFirstOrThrow({ where: {
+            tenantId: targetDirectory.tenantId, networkId: network.id, role: 'ROOT', parentId: null,
+          }});
+          await tx.app.update({ where: { tenantId_id: { tenantId: targetDirectory.tenantId, id: targetDirectory.rootAppId } }, data: { name: primaryDivisionName } });
+          const updatedNetwork = await tx.affiliateNetwork.update({ where: { id: network.id }, data: { name: primaryDivisionName } });
+          const credentialsChanged = root.email !== adminEmail || !!password;
+          const updatedRoot = await tx.affiliateMember.update({ where: { id: root.id }, data: {
+            name: adminName, email: adminEmail, ...(password ? { password } : {}),
+          }});
+          await mirrorMember(tx, updatedNetwork, updatedRoot);
+          if (credentialsChanged) await tx.affiliateSession.deleteMany({ where: {
+            tenantId: targetDirectory.tenantId, networkId: network.id, memberId: root.id,
+          }});
+          await tx.platformDirectory.update({ where: { id: targetDirectory.id }, data: {
+            name, slogan, divisionLabel, directoryAdminName: adminName, directoryAdminEmail: adminEmail,
+          }});
+          await tx.platformAuditLog.create({ data: {
+            administratorId: administrator.id, action: 'directory.updated', directoryId: targetDirectory.id,
+            details: { name, slogan, divisionLabel, primaryDivisionName, directoryAdminEmail: adminEmail, passwordChanged: !!password },
+          }});
+        }, { timeout: 30_000 });
+        return send({ ok: true });
       }
       const stateMatch = path.match(/^\/directories\/([^/]+)\/state$/);
       if (stateMatch && method === 'PUT') {

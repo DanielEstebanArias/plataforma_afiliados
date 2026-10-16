@@ -38,8 +38,23 @@ test('directory UI exposes configurable division labels and destructive confirma
   assert.match(ui, /name="divisionLabel"/);
   assert.match(ui, /borrar directorio/);
   assert.match(ui, /Ingresar con privilegios/);
+  assert.match(ui, /Administrar directorio/);
+  assert.match(ui, /editDirectory/);
+  assert.match(ui, /Nueva contraseña, opcional/);
   assert.match(app, /divisionLabel\(\)/);
   assert.match(app, /Superadministrador de directorio/);
+});
+
+test('directory editing keeps branding, primary division and root account synchronized', () => {
+  const service = fs.readFileSync('src/affiliates/platform-directories.ts', 'utf8');
+  assert.match(service, /method === 'PUT'/);
+  assert.match(service, /primaryDivisionName/);
+  assert.match(service, /tx\.app\.update/);
+  assert.match(service, /tx\.affiliateNetwork\.update/);
+  assert.match(service, /tx\.affiliateMember\.update/);
+  assert.match(service, /await mirrorMember/);
+  assert.match(service, /action: 'directory\.updated'/);
+  assert.match(service, /credentialsChanged/);
 });
 
 test('campaign public links stay inside the owning directory', () => {
